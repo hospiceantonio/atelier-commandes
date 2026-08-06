@@ -1,0 +1,211 @@
+/* =========================================================
+   Vue Recettes — statistiques par période :
+   aujourd'hui / semaine / mois / année / période libre,
+   graphique des encaissements, journal des versements.
+   ========================================================= */
+const VueStats = (() => {
+  const e = Utils.echapper;
+
+  const PERIODES = [
+    { id: "jour", label: "Aujourd'hui" },
+    { id: "semaine", label: "7 jours" },
+    { id: "mois", label: "Ce mois" },
+    { id: "annee", label: "Cette année" },
+    { id: "libre", label: "Choisir…" },
+  ];
+
+  let periodeActive = "mois";
+  let libre = { debut: null, fin: null };
+
+  function bornes(id) {
+    const auj = Utils.aujourdhui();
+    if (id === "jour") return { debut: auj, fin: auj };
+    if (id === "semaine") return { debut: Utils.ajouterJours(auj, -6), fin: auj };
+    if (id === "mois") return { debut: auj.slice(0, 8) + "01", fin: auj };
+    if (id === "annee") return { debut: auj.slice(0, 5) + "01-01", fin: auj };
+    return {
+      debut: libre.debut || auj.slice(0, 8) + "01",
+      fin: libre.fin || auj,
+    };
+  }
+
+  function libellePeriode(id, b) {
+    if (id === "jour") return Utils.fmtDate(b.debut);
+    return "Du " + Utils.fmtDate(b.debut) + " au " + Utils.fmtDate(b.fin);
+  }
+
+  async function afficher(vue) {
+    UI.entete({ titre: "Recettes", sous: "Chaque versement encaissé compte le jour où il est reçu" });
+
+    vue.innerHTML =
+      '<div class="puces" id="puces-periode">' +
+        PERIODES.map((p) =>
+          '<button type="button" class="puce' + (p.id === periodeActive ? " actif" : "") + '" data-periode="' + p.id + '">' +
+            e(p.label) + "</button>"
+        ).join("") +
+      "</div>" +
+      '<div id="zone-libre" hidden><div class="carte"><div class="champ-duo" style="margin:0">' +
+        '<div class="champ" style="margin:0"><label for="periode-debut">Du</label><input type="date" id="periode-debut"></div>' +
+        '<div class="champ" style="margin:0"><label for="periode-fin">Au</label><input type="date" id="periode-fin"></div>' +
+      "</div></div></div>" +
+      '<div id="zone-stats"></div>';
+
+    UI.$("#puces-periode").addEventListener("click", (ev) => {
+      const bouton = ev.target.closest("[data-periode]");
+      if (!bouton) return;
+      periodeActive = bouton.dataset.periode;
+      UI.$$("#puces-periode .puce").forEach((p) => p.classList.toggle("actif", p === bouton));
+      UI.$("#zone-libre").hidden = periodeActive !== "libre";
+      rendre();
+    });
+
+    const b0 = bornes("libre");
+    UI.$("#periode-debut").value = b0.debut;
+    UI.$("#periode-fin").value = b0.fin;
+    for (const idChamp of ["periode-debut", "periode-fin"]) {
+      UI.$("#" + idChamp).addEventListener("change", () => {
+        libre.debut = UI.$("#periode-debut").value || libre.debut;
+        libre.fin = UI.$("#periode-fin").value || libre.fin;
+        if (libre.debut && libre.fin && libre.debut > libre.fin) {
+          [libre.debut, libre.fin] = [libre.fin, libre.debut];
+          UI.$("#periode-debut").value = libre.debut;
+          UI.$("#periode-fin").value = libre.fin;
+        }
+        rendre();
+      });
+    }
+
+    UI.$("#zone-libre").hidden = periodeActive !== "libre";
+
+    async function rendre() {
+      const r = Store.lireReglages();
+      const b = bornes(periodeActive);
+      const stats = await Store.statsPeriode(b.debut, b.fin);
+      const clients = await Store.listerClients();
+      const parId = new Map(clients.map((c) => [c.id, c]));
+
+      let html =
+        '<p style="margin:2px 0 0;font-size:12.5px;color:var(--encre-tres-douce)">' + e(libellePeriode(periodeActive, b)) + "</p>" +
+
+        '<div class="tuiles">' +
+          '<div class="tuile tuile-vert"><div class="tuile-label">' + UI.icone("argent", "ic-sm") + 'Recettes</div>' +
+            '<div class="tuile-valeur">' + Utils.fmtMontant(stats.recettes, r.devise) + "</div>" +
+            '<div class="tuile-note">' + stats.nbPaiements + " versement" + (stats.nbPaiements > 1 ? "s" : "") + "</div></div>" +
+          '<div class="tuile"><div class="tuile-label">' + UI.icone("commandes", "ic-sm") + 'Commandes créées</div>' +
+            '<div class="tuile-valeur">' + stats.commandesCreees + "</div>" +
+            '<div class="tuile-note">' + Utils.fmtMontant(stats.montantCommandes, r.devise) + " au total</div></div>" +
+          '<div class="tuile"><div class="tuile-label">' + UI.icone("check", "ic-sm") + 'Livrées</div>' +
+            '<div class="tuile-valeur">' + stats.commandesLivrees + "</div>" +
+            '<div class="tuile-note">sur la période</div></div>' +
+          '<div class="tuile tuile-rouge"><div class="tuile-label">' + UI.icone("horloge", "ic-sm") + 'Reste à encaisser</div>' +
+            '<div class="tuile-valeur">' + Utils.fmtMontant(stats.soldesOuverts, r.devise) + "</div>" +
+            '<div class="tuile-note">commandes non soldées</div></div>' +
+        "</div>";
+
+      html +=
+        '<div class="carte"><div class="carte-titre">' + UI.icone("stats", "ic-sm") + "Encaissements par " +
+          (Utils.ecartJours(b.debut, b.fin) > 62 ? "mois" : "jour") + "</div>" +
+          graphique(b, stats, r) +
+        "</div>";
+
+      /* Journal des versements */
+      html += '<div class="section-titre">' + UI.icone("argent", "ic-sm") + "Journal des versements</div>";
+      if (stats.paiements.length) {
+        html += '<div class="carte"><div class="mini-liste">' +
+          stats.paiements.slice(0, 60).map((p) => {
+            const client = parId.get(p.commande.clientId);
+            return (
+              '<div class="mini">' +
+                '<span class="l"><strong>' + e(Utils.nomComplet(client)) + "</strong> · " + e(p.commande.numero) +
+                  '<br><span style="color:var(--encre-tres-douce);font-size:12px">' + e(p.note || "Versement") + " — " + Utils.fmtDateHeure(p.date) + "</span></span>" +
+                '<span class="v" style="color:var(--vert)">+' + Utils.fmtMontant(p.montant, r.devise) + "</span>" +
+              "</div>"
+            );
+          }).join("") +
+          (stats.paiements.length > 60
+            ? '<p style="margin:6px 0 0;font-size:12px;color:var(--encre-tres-douce);text-align:center">' +
+              (stats.paiements.length - 60) + " versements plus anciens non affichés</p>"
+            : "") +
+        "</div></div>";
+      } else {
+        html += UI.vide("argent", "Aucun encaissement sur la période",
+          "Les acomptes et versements apparaîtront ici.");
+      }
+
+      UI.$("#zone-stats").innerHTML = html;
+    }
+
+    rendre();
+  }
+
+  /* ---------- Graphique en barres (SVG, sans dépendance) ---------- */
+
+  function graphique(b, stats, r) {
+    const nbJours = Utils.ecartJours(b.debut, b.fin) + 1;
+    const parMois = nbJours > 62;
+
+    /* Regroupe par jour ou par mois selon l'étendue. */
+    const seaux = [];
+    if (parMois) {
+      const table = {};
+      for (const [jour, montant] of Object.entries(stats.parJour)) {
+        const cle = jour.slice(0, 7);
+        table[cle] = (table[cle] || 0) + montant;
+      }
+      let d = Utils.versDate(b.debut.slice(0, 8) + "01");
+      const fin = Utils.versDate(b.fin);
+      while (d <= fin) {
+        const cle = d.getFullYear() + "-" + Utils.pad(d.getMonth() + 1);
+        seaux.push({ label: Utils.MOIS_COURT[d.getMonth()], montant: table[cle] || 0 });
+        d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      }
+    } else {
+      for (let i = 0; i < nbJours; i++) {
+        const jour = Utils.ajouterJours(b.debut, i);
+        const dte = Utils.versDate(jour);
+        seaux.push({
+          label: nbJours <= 7 ? ["D", "L", "M", "M", "J", "V", "S"][dte.getDay()] + " " + dte.getDate() : String(dte.getDate()),
+          montant: stats.parJour[jour] || 0,
+        });
+      }
+    }
+
+    if (!seaux.length || seaux.every((s) => !s.montant)) {
+      return '<p style="margin:0;font-size:13px;color:var(--encre-tres-douce)">Rien à tracer pour l\'instant.</p>';
+    }
+
+    const L = 320, H = 150, basY = 128;
+    const max = Math.max(...seaux.map((s) => s.montant));
+    const pas = L / seaux.length;
+    const largeurBarre = Math.min(26, Math.max(3, pas - 4));
+    const montrerLabels = seaux.length <= 16;
+    const pasLabel = montrerLabels ? 1 : Math.ceil(seaux.length / 8);
+
+    let barres = "";
+    seaux.forEach((seau, i) => {
+      const h = seau.montant ? Math.max(3, (seau.montant / max) * (basY - 26)) : 2;
+      const x = i * pas + (pas - largeurBarre) / 2;
+      const y = basY - h;
+      barres +=
+        '<rect class="barre' + (seau.montant ? "" : " barre-vide") + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+          '" width="' + largeurBarre.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2.5"></rect>';
+      if (seau.montant && seau.montant === max) {
+        barres += '<text class="val" x="' + (x + largeurBarre / 2).toFixed(1) + '" y="' + (y - 5).toFixed(1) +
+          '" text-anchor="middle">' + Utils.fmtNombre(seau.montant) + "</text>";
+      }
+      if (i % pasLabel === 0) {
+        barres += '<text x="' + (x + largeurBarre / 2).toFixed(1) + '" y="' + (basY + 13) +
+          '" text-anchor="middle">' + e(seau.label) + "</text>";
+      }
+    });
+
+    return (
+      '<svg class="graph" viewBox="0 0 ' + L + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Encaissements sur la période">' +
+        '<line class="axe" x1="0" y1="' + basY + '" x2="' + L + '" y2="' + basY + '"></line>' +
+        barres +
+      "</svg>"
+    );
+  }
+
+  return { afficher };
+})();
