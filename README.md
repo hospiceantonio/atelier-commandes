@@ -11,7 +11,8 @@ l'installation.
 ## Fonctionnalités
 
 ### Clients
-- Nom, prénom, téléphone (WhatsApp), note libre.
+- Nom, prénom, téléphone d'appel et numéro WhatsApp (séparés si besoin,
+  un seul suffit), note libre.
 - **Mesures enregistrées une fois pour toutes** (épaule, poitrine, taille,
   manches, pantalon… en cm) et réutilisées à chaque nouvelle commande.
 - Recherche par nom ou téléphone, insensible aux accents.

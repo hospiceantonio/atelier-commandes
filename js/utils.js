@@ -170,6 +170,18 @@ const Utils = (() => {
     return [client.prenom, client.nom].filter(Boolean).join(" ").trim() || "Sans nom";
   }
 
+  /** Numéro à composer pour un appel (repli sur le numéro WhatsApp). */
+  function telAppel(client) {
+    if (!client) return "";
+    return String(client.tel || client.telWhatsApp || "").trim();
+  }
+
+  /** Numéro à utiliser pour WhatsApp (repli sur le numéro d'appel). */
+  function telWhatsApp(client) {
+    if (!client) return "";
+    return String(client.telWhatsApp || client.tel || "").trim();
+  }
+
   /** Comparaison insensible aux accents et à la casse, pour la recherche. */
   function sansAccent(s) {
     return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -259,7 +271,7 @@ const Utils = (() => {
     fmtNombre, fmtMontant, lireNombre,
     isoJour, versDate, aujourdhui, ajouterJours, fmtDate, fmtDateCourte, fmtJourDate,
     fmtDateHeure, fmtHeure, ecartJours, delai, MOIS, MOIS_COURT,
-    normaliserTel, lienWhatsApp, lienTel, fmtTel,
+    normaliserTel, lienWhatsApp, lienTel, fmtTel, telAppel, telWhatsApp,
     initiales, nomComplet, sansAccent, tempo, remplirModele, telecharger,
     compresserImage, tailleLisible,
   };

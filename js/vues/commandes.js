@@ -159,7 +159,7 @@ const VueCommandes = (() => {
           '<div class="suggestion" style="border-color:var(--indigo-500)">' +
             UI.pastilleClient(clientChoisi) +
             '<span style="flex:1;min-width:0"><span class="nom">' + e(Utils.nomComplet(clientChoisi)) + "</span>" +
-              '<div class="tel">' + e(Utils.fmtTel(clientChoisi.tel)) + " · " +
+              '<div class="tel">' + e(Utils.fmtTel(Utils.telAppel(clientChoisi))) + " · " +
                 (nbMes ? nbMes + " mesures en fiche" : "aucune mesure en fiche") + "</div></span>" +
             '<button type="button" class="btn btn-clair btn-sm" id="changer-client">Changer</button>' +
           "</div>" +
@@ -187,7 +187,7 @@ const VueCommandes = (() => {
           ? visibles.map((c) =>
               '<button type="button" class="suggestion" data-id="' + c.id + '">' +
                 UI.pastilleClient(c) +
-                '<span><span class="nom">' + e(Utils.nomComplet(c)) + '</span><div class="tel">' + e(Utils.fmtTel(c.tel)) + "</div></span>" +
+                '<span><span class="nom">' + e(Utils.nomComplet(c)) + '</span><div class="tel">' + e(Utils.fmtTel(Utils.telAppel(c))) + "</div></span>" +
               "</button>"
             ).join("")
           : '<p style="margin:4px 0;font-size:13px;color:var(--encre-tres-douce)">' +
@@ -215,8 +215,10 @@ const VueCommandes = (() => {
             '<div class="champ"><label for="mini-nom">Nom</label>' +
               '<input id="mini-nom" autocapitalize="words" autocomplete="off"></div>' +
           "</div>" +
-          '<div class="champ"><label for="mini-tel">Téléphone (WhatsApp)</label>' +
+          '<div class="champ"><label for="mini-tel">Téléphone (appels)</label>' +
             '<input id="mini-tel" type="tel" inputmode="tel" autocomplete="off" placeholder="97 00 00 00"></div>' +
+          "<div class=\"champ\"><label for=\"mini-tel-wa\">Numéro WhatsApp (si différent)</label>" +
+            '<input id="mini-tel-wa" type="tel" inputmode="tel" autocomplete="off" placeholder="97 00 00 00"></div>' +
           '<p style="font-size:12px;color:var(--encre-tres-douce);margin:0 0 12px">' +
             "Vous pourrez saisir ses mesures depuis sa fiche.</p>" +
           '<button type="button" class="btn btn-bloc" id="mini-ok">' + UI.icone("check", "ic-sm") + "Créer le client</button>" +
@@ -228,6 +230,7 @@ const VueCommandes = (() => {
             prenom: UI.$("#mini-prenom", corps).value,
             nom: UI.$("#mini-nom", corps).value,
             tel: UI.$("#mini-tel", corps).value,
+            telWhatsApp: UI.$("#mini-tel-wa", corps).value,
           });
           clients.push(nouveau);
           clients.sort((a, b) => Utils.sansAccent(Utils.nomComplet(a)).localeCompare(Utils.sansAccent(Utils.nomComplet(b)), "fr"));
@@ -340,10 +343,11 @@ const VueCommandes = (() => {
 
         UI.toast("Commande " + commande.numero + " enregistrée", "ok");
 
-        if (UI.$("#cmd-wa").checked && clientChoisi.tel) {
+        const numeroWa = Utils.telWhatsApp(clientChoisi);
+        if (UI.$("#cmd-wa").checked && numeroWa) {
           const message = Store.messageCommande(commande, clientChoisi);
-          window.open(Utils.lienWhatsApp(clientChoisi.tel, message, r.indicatif), "_blank");
-        } else if (UI.$("#cmd-wa").checked && !clientChoisi.tel) {
+          window.open(Utils.lienWhatsApp(numeroWa, message, r.indicatif), "_blank");
+        } else if (UI.$("#cmd-wa").checked && !numeroWa) {
           UI.toast("Pas de téléphone en fiche : message WhatsApp non envoyé");
         }
         location.hash = "#/commande/" + commande.id;
@@ -396,8 +400,8 @@ const VueCommandes = (() => {
         (client
           ? '<div class="btn-rangee" style="margin-top:12px">' +
               '<a class="btn btn-clair btn-sm" href="#/client/' + client.id + '">Voir la fiche</a>' +
-              (client.tel
-                ? '<a class="btn btn-clair btn-sm" href="' + e(Utils.lienTel(client.tel, r.indicatif)) + '">' + UI.icone("tel", "ic-sm") + "Appeler</a>"
+              (Utils.telAppel(client)
+                ? '<a class="btn btn-clair btn-sm" href="' + e(Utils.lienTel(Utils.telAppel(client), r.indicatif)) + '">' + UI.icone("tel", "ic-sm") + "Appeler</a>"
                 : "") +
             "</div>"
           : "") +
@@ -478,7 +482,7 @@ const VueCommandes = (() => {
       "</div>";
 
     /* WhatsApp */
-    if (client && client.tel) {
+    if (client && Utils.telWhatsApp(client)) {
       html +=
         '<div class="carte">' +
           '<div class="carte-titre">' + UI.icone("whatsapp", "ic-sm") + "Message WhatsApp</div>" +
@@ -589,12 +593,12 @@ const VueCommandes = (() => {
     const waRecap = UI.$("#wa-recap");
     if (waRecap) waRecap.onclick = () => {
       const message = Store.messageCommande(commande, client);
-      window.open(Utils.lienWhatsApp(client.tel, message, r.indicatif), "_blank");
+      window.open(Utils.lienWhatsApp(Utils.telWhatsApp(client), message, r.indicatif), "_blank");
     };
     const waPret = UI.$("#wa-pret");
     if (waPret) waPret.onclick = () => {
       const message = Store.messageCommande(commande, client, r.modeleWhatsAppPret);
-      window.open(Utils.lienWhatsApp(client.tel, message, r.indicatif), "_blank");
+      window.open(Utils.lienWhatsApp(Utils.telWhatsApp(client), message, r.indicatif), "_blank");
     };
 
     UI.$("#suppr-cmd").onclick = async () => {

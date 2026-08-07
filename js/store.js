@@ -75,6 +75,7 @@ const Store = (() => {
       prenom: (donnees.prenom || "").trim(),
       nom: (donnees.nom || "").trim(),
       tel: (donnees.tel || "").trim(),
+      telWhatsApp: (donnees.telWhatsApp || "").trim(),
       note: (donnees.note || "").trim(),
       mesures: Mesures.nettoyer(donnees.mesures !== undefined ? donnees.mesures : (existant && existant.mesures)),
       creeLe: existant ? existant.creeLe : maintenant,
@@ -96,7 +97,8 @@ const Store = (() => {
     const t = Utils.sansAccent(terme).trim();
     if (!t) return clients;
     return clients.filter((c) => {
-      const texte = Utils.sansAccent(Utils.nomComplet(c) + " " + (c.tel || ""));
+      const texte = Utils.sansAccent(
+        Utils.nomComplet(c) + " " + (c.tel || "") + " " + (c.telWhatsApp || ""));
       return t.split(/\s+/).every((mot) => texte.includes(mot));
     });
   }
