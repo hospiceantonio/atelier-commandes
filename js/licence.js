@@ -17,8 +17,8 @@ const Licence = (() => {
     // -> Développeurs). Tant qu'elle est vide, seul le code de déblocage
     // est proposé sur l'écran de paiement.
     cleKkiapayPublique: "cd247746fdf5c93c86466b01d4f770f582c53c2f",
-    kkiapaySandbox: false,      // true = paiements de test KKiaPay
-    contactVendeur: "",         // ex. "+229 97 00 00 00" (affiché aux clients)
+    kkiapaySandbox: true,  // paiements de TEST — repasser à false avant de vendre      // true = paiements de test KKiaPay
+    contactVendeur: "01 96 20 20 98",         // ex. "+229 97 00 00 00" (affiché aux clients)
     // Empreintes SHA-256 des codes de déblocage définitif.
     empreintesCodes: [
     "c69c9c9c15d110bfd57e079efd91f0fcea623d7d80d10ccf7091b8a42bb6a58d",
