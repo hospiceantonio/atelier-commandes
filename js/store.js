@@ -335,14 +335,16 @@ const Store = (() => {
   /* ---------- Sauvegarde / restauration ---------- */
 
   async function exporter() {
-    const [clients, commandes, photos] = await Promise.all([
+    const [clients, commandes, photos, licence] = await Promise.all([
       DB.lireTout("clients"), DB.lireTout("commandes"), DB.lireTout("photos"),
+      DB.lire("reglages", "licence"),
     ]);
     return {
       application: "atelier",
       version: 1,
       exporteLe: new Date().toISOString(),
       reglages: lireReglages(),
+      licence: licence || null,
       clients, commandes, photos,
     };
   }
@@ -357,6 +359,7 @@ const Store = (() => {
     // Les photos une par une : un lot trop gros peut dépasser la mémoire d'une transaction.
     for (const photo of donnees.photos || []) await DB.ecrire("photos", photo);
     if (donnees.reglages) await majReglages({ ...donnees.reglages, cle: "general" });
+    if (donnees.licence && donnees.licence.cle === "licence") await DB.ecrire("reglages", donnees.licence);
     return {
       clients: donnees.clients.length,
       commandes: (donnees.commandes || []).length,

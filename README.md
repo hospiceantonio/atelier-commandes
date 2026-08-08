@@ -42,6 +42,25 @@ l'installation.
 - Réglages : nom de l'atelier, devise (FCFA par défaut), indicatif pays
   pour WhatsApp (229 par défaut), modèles de messages.
 
+## Licence (application payante)
+
+L'application offre un essai gratuit puis se bloque : abonnement mensuel
+via KKiaPay, ou code de déblocage définitif fourni par le vendeur. Tout
+se configure en tête de `js/licence.js` :
+
+- `prixMensuel` (5 000 FCFA), `joursEssai` (14), `joursParPaiement` (31) ;
+- `cleKkiapayPublique` : clé **publique** du compte KKiaPay du vendeur
+  (kkiapay.me → Développeurs). Tant qu'elle est vide, seul le code de
+  déblocage est proposé ;
+- `contactVendeur` : numéro affiché sur l'écran de blocage ;
+- `empreintesCodes` : empreintes SHA-256 des codes valides. Générer de
+  nouveaux codes avec `node tools/generer-codes.js 10` — remettre les
+  codes aux clients, coller les empreintes ici. Les codes en clair ne
+  doivent jamais être commités.
+
+Le blocage étant vérifié dans l'application (pas de serveur), il protège
+contre l'usage ordinaire, pas contre un développeur qui modifie le code.
+
 ## Application Android (APK)
 
 À chaque mise à jour, un APK prêt à installer est construit automatiquement

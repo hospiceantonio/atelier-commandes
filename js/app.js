@@ -31,6 +31,10 @@
   }
 
   async function naviguer() {
+    if (!Licence.actif()) {
+      Licence.afficherVoile();
+      return;
+    }
     const { chemin, params } = lireHash();
     const vue = document.getElementById("vue");
     UI.fermerFeuille();
@@ -91,6 +95,7 @@
   async function demarrer() {
     try {
       await Store.init();
+      await Licence.init();
     } catch (err) {
       document.getElementById("vue").innerHTML =
         '<div class="carte"><div class="carte-titre">Stockage indisponible</div>' +

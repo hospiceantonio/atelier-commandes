@@ -58,6 +58,20 @@ const VueReglages = (() => {
         '<input type="file" id="fichier-import" accept=".json,application/json" hidden>' +
       "</div>" +
 
+      '<div class="carte" style="margin-top:14px">' +
+        '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Licence</div>" +
+        '<p style="margin:0 0 12px;font-size:13.5px;line-height:1.5;color:var(--encre-douce)" id="licence-resume">' +
+          e(Licence.resume()) +
+        "</p>" +
+        '<div class="btn-rangee">' +
+          (Licence.CONFIG.cleKkiapayPublique
+            ? '<button type="button" class="btn btn-or" id="btn-payer-licence">Payer ' +
+              Utils.fmtNombre(Licence.CONFIG.prixMensuel) + " FCFA (1 mois)</button>"
+            : "") +
+          '<button type="button" class="btn btn-contour" id="btn-code-licence">Entrer un code</button>' +
+        "</div>" +
+      "</div>" +
+
       '<p class="pied-note">Atelier — application hors ligne. Vos données ne quittent jamais ce téléphone.</p>';
 
     UI.$("#form-reglages").addEventListener("submit", async (ev) => {
@@ -83,6 +97,34 @@ const VueReglages = (() => {
       } catch (err) {
         UI.toast(err.message || "Export impossible", "erreur");
       }
+    };
+
+    const boutonPayerLicence = UI.$("#btn-payer-licence");
+    if (boutonPayerLicence) boutonPayerLicence.onclick = async () => {
+      boutonPayerLicence.disabled = true;
+      try { await Licence.payer(); }
+      catch (err) { UI.toast(err.message || "Paiement indisponible", "erreur"); }
+      boutonPayerLicence.disabled = false;
+    };
+
+    UI.$("#btn-code-licence").onclick = () => {
+      const corps = UI.ouvrirFeuille("Code de déblocage",
+        '<div class="carte">' +
+          '<div class="champ"><label for="code-licence">Code fourni par votre installateur</label>' +
+            '<input id="code-licence" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ATEL-XXXXX-XXXXX"></div>' +
+          '<button type="button" class="btn btn-bloc" id="code-licence-ok">Débloquer définitivement</button>' +
+        "</div>");
+      UI.$("#code-licence", corps).focus();
+      UI.$("#code-licence-ok", corps).onclick = async () => {
+        const ok = await Licence.essayerCode(UI.$("#code-licence", corps).value);
+        if (ok) {
+          UI.fermerFeuille();
+          UI.toast("Application débloquée définitivement. Merci !", "ok");
+          UI.$("#licence-resume").textContent = Licence.resume();
+        } else {
+          UI.toast("Code invalide — vérifiez et réessayez", "erreur");
+        }
+      };
     };
 
     const fichier = UI.$("#fichier-import");
