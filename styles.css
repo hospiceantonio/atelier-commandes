@@ -227,7 +227,7 @@ h1,h2,h3,h4{margin:0;line-height:1.25}
 }
 .ligne:active{background:var(--indigo-50)}
 .ligne-corps{flex:1;min-width:0}
-.ligne-titre{font-size:15px;font-weight:650;letter-spacing:-.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ligne-titre{display:block;max-width:100%;font-size:15px;font-weight:650;letter-spacing:-.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ligne-sous{font-size:12.5px;color:var(--encre-tres-douce);margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .ligne-fin{text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
 .ligne-montant{font-size:14.5px;font-weight:700;white-space:nowrap}
