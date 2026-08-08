@@ -1,0 +1,61 @@
+plugins {
+  id 'com.android.application'
+}
+
+// Numéro de build injecté par GitHub Actions : chaque APK publié est plus
+// récent que le précédent, les mises à jour s'installent donc par-dessus.
+def numeroBuild = Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '1')
+
+android {
+  namespace 'com.atelier.commandes'
+  compileSdk 34
+
+  defaultConfig {
+    applicationId 'com.atelier.commandes'
+    minSdk 24
+    targetSdk 34
+    versionCode numeroBuild
+    versionName "1.${numeroBuild}"
+  }
+
+  // Clé auto-signée du dépôt : distribution directe (APK) uniquement,
+  // à remplacer par une clé privée pour une publication sur le Play Store.
+  signingConfigs {
+    liberation {
+      storeFile file("${rootDir.parentFile}/signature/atelier.p12")
+      storeType 'pkcs12'
+      storePassword 'atelier2026'
+      keyAlias 'atelier'
+      keyPassword 'atelier2026'
+    }
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+      signingConfig signingConfigs.liberation
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  sourceSets.main.assets.srcDirs = ['src/main/assets', "$buildDir/web"]
+}
+
+dependencies {
+  implementation 'androidx.core:core:1.13.1'
+  implementation 'androidx.webkit:webkit:1.11.0'
+}
+
+// L'application web du dépôt est embarquée telle quelle dans l'APK
+// (sw.js exclu : le cache hors ligne est inutile, tout est déjà local).
+tasks.register('copierWeb', Copy) {
+  from(rootDir.parentFile) {
+    include 'index.html', 'styles.css', 'manifest.webmanifest', 'js/**', 'icons/**'
+  }
+  into "$buildDir/web/www"
+}
+preBuild.dependsOn 'copierWeb'

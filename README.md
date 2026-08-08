@@ -42,6 +42,22 @@ l'installation.
 - Réglages : nom de l'atelier, devise (FCFA par défaut), indicatif pays
   pour WhatsApp (229 par défaut), modèles de messages.
 
+## Application Android (APK)
+
+À chaque mise à jour, un APK prêt à installer est construit automatiquement
+(workflow `.github/workflows/apk.yml`) et publié à ce lien stable :
+
+**https://github.com/hospiceantonio/atelier-commandes/releases/download/apk/atelier.apk**
+
+Téléchargez-le sur le téléphone, ouvrez-le, et autorisez l'installation
+depuis cette source si Android le demande. L'APK embarque toute
+l'application : il fonctionne hors ligne dès l'installation, la caméra et
+WhatsApp passent par le système. Les mises à jour s'installent par-dessus
+sans perdre les données.
+
+> La clé `signature/atelier.p12` ne sert qu'à cette distribution directe ;
+> pour une publication sur le Play Store, générez une clé privée.
+
 ## Installation sur téléphone
 
 Le dépôt se déploie tout seul sur GitHub Pages à chaque push sur `main`

@@ -36,7 +36,8 @@ jobs:
         run: |
           mkdir -p _site
           rsync -a --exclude '.git' --exclude '.github' --exclude '_site' \
-            --exclude 'serve.ps1' --exclude 'tools' ./ _site/
+            --exclude 'serve.ps1' --exclude 'tools' \
+            --exclude 'android' --exclude 'signature' ./ _site/
 
       - name: Téléverser l'artefact Pages
         uses: actions/upload-pages-artifact@v3

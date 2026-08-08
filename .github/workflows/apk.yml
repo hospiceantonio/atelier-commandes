@@ -1,0 +1,47 @@
+# Construit l'APK Android (enveloppe WebView de l'application) et le publie
+# dans la release "apk" — le lien de téléchargement reste donc stable :
+# https://github.com/hospiceantonio/atelier-commandes/releases/download/apk/atelier.apk
+name: Construire l'APK Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Installer Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Construire l'APK signé
+        run: gradle -p android assembleRelease --no-daemon
+
+      - name: Publier dans la release « apk »
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk atelier.apk
+          gh release view apk >/dev/null 2>&1 || gh release create apk \
+            --title "Atelier — application Android (APK)" \
+            --notes "Installation : téléchargez atelier.apk sur le téléphone, ouvrez-le et autorisez l'installation depuis cette source si Android le demande. Les mises à jour s'installent par-dessus sans perdre les données."
+          gh release upload apk atelier.apk --clobber
