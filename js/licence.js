@@ -16,7 +16,7 @@ const Licence = (() => {
     // Clé PUBLIQUE KKiaPay du vendeur (https://kkiapay.me, tableau de bord
     // -> Développeurs). Tant qu'elle est vide, seul le code de déblocage
     // est proposé sur l'écran de paiement.
-    cleKkiapayPublique: "",
+    cleKkiapayPublique: "cd247746fdf5c93c86466b01d4f770f582c53c2f",
     kkiapaySandbox: false,      // true = paiements de test KKiaPay
     contactVendeur: "",         // ex. "+229 97 00 00 00" (affiché aux clients)
     // Empreintes SHA-256 des codes de déblocage définitif.
