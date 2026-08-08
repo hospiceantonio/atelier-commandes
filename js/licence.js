@@ -117,14 +117,17 @@ const Licence = (() => {
     return Array.from(new Uint8Array(h)).map((o) => o.toString(16).padStart(2, "0")).join("");
   }
 
-  /** Essaie un code saisi ; renvoie true si l'application est débloquée. */
+  /** Essaie un code saisi ; un code valide ouvre l'application pour un mois. */
   async function essayerCode(saisie) {
     const canonique = String(saisie || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (canonique.length < 8) return false;
     const h = await empreinte(canonique);
     if (!CONFIG.empreintesCodes.includes(h)) return false;
-    etat.complet = true;
+    // Code commercial : ouvre l'application pour un mois, sans cumul —
+    // une nouvelle saisie repart simplement d'aujourd'hui.
+    etat.finAbonnement = Date.now() + CONFIG.joursParPaiement * JOUR;
     etat.codeUtilise = h;
+    etat.dernierUsage = Date.now();
     etat.horlogeSuspecte = false;
     await DB.ecrire("reglages", etat);
     return true;
@@ -200,7 +203,7 @@ const Licence = (() => {
             '<div class="voile-ou">— ou —</div>'
           : "") +
         '<div class="champ" style="margin-bottom:10px;text-align:left">' +
-          '<label for="voile-code">Code de déblocage définitif</label>' +
+          '<label for="voile-code">Code de déblocage (1 mois)</label>' +
           '<input id="voile-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ATEL-XXXXX-XXXXX">' +
         "</div>" +
         '<button type="button" class="btn btn-bloc" id="voile-debloquer">Débloquer l\'application</button>' +
@@ -225,7 +228,7 @@ const Licence = (() => {
       const ok = await essayerCode(champ.value);
       if (ok) {
         masquerVoile();
-        UI.toast("Application débloquée définitivement. Merci !", "ok");
+        UI.toast("Application débloquée pour 1 mois. Merci !", "ok");
         location.hash = "#/";
         window.dispatchEvent(new HashChangeEvent("hashchange"));
       } else {

@@ -45,8 +45,9 @@ l'installation.
 ## Licence (application payante)
 
 L'application offre un essai gratuit puis se bloque : abonnement mensuel
-via KKiaPay, ou code de déblocage définitif fourni par le vendeur. Tout
-se configure en tête de `js/licence.js` :
+via KKiaPay, ou code de déblocage valable un mois (destiné aux
+commerciaux qui présentent l'application, à ressaisir chaque mois).
+Tout se configure en tête de `js/licence.js` :
 
 - `prixMensuel` (5 000 FCFA), `joursEssai` (14), `joursParPaiement` (31) ;
 - `cleKkiapayPublique` : clé **publique** du compte KKiaPay du vendeur

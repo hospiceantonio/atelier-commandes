@@ -112,14 +112,14 @@ const VueReglages = (() => {
         '<div class="carte">' +
           '<div class="champ"><label for="code-licence">Code fourni par votre installateur</label>' +
             '<input id="code-licence" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ATEL-XXXXX-XXXXX"></div>' +
-          '<button type="button" class="btn btn-bloc" id="code-licence-ok">Débloquer définitivement</button>' +
+          '<button type="button" class="btn btn-bloc" id="code-licence-ok">Débloquer pour 1 mois</button>' +
         "</div>");
       UI.$("#code-licence", corps).focus();
       UI.$("#code-licence-ok", corps).onclick = async () => {
         const ok = await Licence.essayerCode(UI.$("#code-licence", corps).value);
         if (ok) {
           UI.fermerFeuille();
-          UI.toast("Application débloquée définitivement. Merci !", "ok");
+          UI.toast("Application débloquée pour 1 mois. Merci !", "ok");
           UI.$("#licence-resume").textContent = Licence.resume();
         } else {
           UI.toast("Code invalide — vérifiez et réessayez", "erreur");
