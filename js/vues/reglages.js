@@ -25,6 +25,10 @@ const VueReglages = (() => {
           '<div class="paire"><span class="l">Actif jusqu\'au</span><span class="v vert">' +
             (r.abonnementFin ? Utils.fmtDate(Utils.isoJour(new Date(r.abonnementFin))) : "—") + "</span></div>" +
         "</div>" +
+        (Paiement.disponible()
+          ? '<button type="button" class="btn btn-or btn-bloc" id="btn-renouveler" style="margin-top:12px">' +
+              "Renouveler : " + Utils.fmtMontant(r.abonnementMensuel, r.devise) + " par Mobile Money / carte</button>"
+          : "") +
         '<div class="aide" style="margin-top:8px">Ces informations sont gérées par votre fournisseur.</div>' +
       "</div>" +
 
@@ -122,6 +126,9 @@ const VueReglages = (() => {
         UI.toast(err.message || "Enregistrement impossible", "erreur");
       }
     });
+
+    const boutonRenouveler = UI.$("#btn-renouveler");
+    if (boutonRenouveler) boutonRenouveler.onclick = () => Paiement.payer();
 
     UI.$("#btn-exporter").onclick = async () => {
       try {

@@ -280,3 +280,94 @@ drop policy if exists depenses_par_atelier on public.depenses;
 create policy depenses_par_atelier on public.depenses for all to authenticated
   using (atelier_id = public.atelier_courant())
   with check (atelier_id = public.atelier_courant());
+
+-- =========================================================
+-- Paiement de l'abonnement par KKiaPay
+-- =========================================================
+
+-- Réglages de paiement (une seule ligne) : la clé publique KKiaPay est
+-- faite pour être côté client ; la ranger en base permet de passer du
+-- bac à sable à la production sans reconstruire le site ni l'APK.
+create table if not exists public.parametres (
+  id                   integer primary key default 1 check (id = 1),
+  kkiapay_cle_publique text not null default '',
+  kkiapay_sandbox      boolean not null default true,
+  modifie_le           timestamptz not null default now()
+);
+
+insert into public.parametres (id) values (1) on conflict (id) do nothing;
+
+alter table public.parametres enable row level security;
+
+drop policy if exists parametres_lecture on public.parametres;
+create policy parametres_lecture on public.parametres for select to authenticated
+  using (true);
+
+drop policy if exists parametres_modification on public.parametres;
+create policy parametres_modification on public.parametres for update to authenticated
+  using (public.role_courant() = 'superadmin')
+  with check (public.role_courant() = 'superadmin');
+
+-- Journal des paiements reçus. Aucune règle d'écriture : seule la
+-- fonction appelée par le webhook (service_role) y insère.
+create table if not exists public.paiements_abonnement (
+  id         uuid primary key default gen_random_uuid(),
+  atelier_id uuid not null references public.ateliers (id) on delete cascade,
+  reference  text not null,     -- 'kkiapay:<transactionId>' : l'unicité rend le crédit idempotent
+  montant    numeric not null,
+  mois       integer not null,
+  fin_avant  timestamptz,
+  fin_apres  timestamptz,
+  cree_le    timestamptz not null default now()
+);
+
+create unique index if not exists paiements_reference_unique on public.paiements_abonnement (reference);
+create index if not exists paiements_par_atelier on public.paiements_abonnement (atelier_id);
+
+alter table public.paiements_abonnement enable row level security;
+
+drop policy if exists paiements_lecture on public.paiements_abonnement;
+create policy paiements_lecture on public.paiements_abonnement for select to authenticated
+  using (public.role_courant() = 'superadmin' or atelier_id = public.atelier_courant());
+
+-- Crédit idempotent : appelée uniquement par le webhook, avec le montant
+-- annoncé par KKiaPay (jamais celui demandé par l'application). KKiaPay
+-- rejoue sa notification jusqu'à 5 fois : la référence unique garantit
+-- qu'un même paiement ne prolonge qu'une seule fois.
+create or replace function public.prolonger_abonnement_kkiapay(
+  p_atelier uuid, p_reference text, p_montant numeric
+) returns jsonb language plpgsql security definer set search_path = public as
+$$
+declare
+  a public.ateliers%rowtype;
+  n_mois integer;
+  nouvelle_fin timestamptz;
+begin
+  if exists (select 1 from public.paiements_abonnement where reference = p_reference) then
+    return jsonb_build_object('statut', 'deja_traite');
+  end if;
+  select * into a from public.ateliers where id = p_atelier for update;
+  if not found then
+    return jsonb_build_object('statut', 'atelier_inconnu');
+  end if;
+  n_mois := floor(p_montant / nullif(a.abonnement_mensuel, 0))::integer;
+  if n_mois is null or n_mois < 1 then
+    return jsonb_build_object('statut', 'montant_insuffisant');
+  end if;
+  n_mois := least(n_mois, 12);
+  nouvelle_fin := greatest(a.abonnement_fin, now()) + make_interval(days => 31 * n_mois);
+  update public.ateliers set abonnement_fin = nouvelle_fin where id = a.id;
+  insert into public.paiements_abonnement (atelier_id, reference, montant, mois, fin_avant, fin_apres)
+  values (a.id, p_reference, p_montant, n_mois, a.abonnement_fin, nouvelle_fin);
+  return jsonb_build_object('statut', 'ok', 'mois', n_mois, 'fin', nouvelle_fin);
+exception when unique_violation then
+  return jsonb_build_object('statut', 'deja_traite');
+end
+$$;
+
+-- La fonction ignore RLS : elle doit être inappelable depuis les
+-- applications. Les privilèges par défaut de Supabase donnent EXECUTE à
+-- anon et authenticated : les révoquer explicitement est indispensable.
+revoke all on function public.prolonger_abonnement_kkiapay(uuid, text, numeric)
+  from public, anon, authenticated;
+grant execute on function public.prolonger_abonnement_kkiapay(uuid, text, numeric) to service_role;

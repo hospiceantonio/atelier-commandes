@@ -9,6 +9,7 @@ const Api = (() => {
   let session = null;
   let profil = null;
   let atelier = null;
+  let parametres = null;
 
   const ERREURS = {
     "Invalid login credentials": "Email ou mot de passe incorrect.",
@@ -41,6 +42,7 @@ const Api = (() => {
   async function chargerContexte() {
     profil = null;
     atelier = null;
+    parametres = null;
     if (!session) return;
     const { data: p } = await client.from("profils").select("*").eq("id", session.user.id).single();
     if (!p) return;
@@ -49,6 +51,9 @@ const Api = (() => {
       const { data: a } = await client.from("ateliers").select("*").eq("id", p.atelier_id).single();
       atelier = a || null;
     }
+    // Réglages de paiement (absents tant que la base n'est pas à jour).
+    const { data: prm } = await client.from("parametres").select("*").eq("id", 1).single();
+    parametres = prm || null;
   }
 
   const connecte = () => !!session;
@@ -56,6 +61,12 @@ const Api = (() => {
   const lireProfil = () => profil;
   const lireAtelier = () => atelier;
   const atelierId = () => (profil ? profil.atelier_id : null);
+  const lireParametres = () => parametres;
+
+  async function majParametres(objet) {
+    parametres = await mettreAJour("parametres", 1, { ...objet, modifie_le: new Date().toISOString() });
+    return parametres;
+  }
 
   async function connexion(email, motDePasse) {
     const { data, error } = await client.auth.signInWithPassword({ email, password: motDePasse });
@@ -150,6 +161,7 @@ const Api = (() => {
   return {
     configOk, bibliothequeOk, init, chargerContexte,
     connecte, role, lireProfil, lireAtelier, atelierId, rafraichirAtelier,
+    lireParametres, majParametres,
     connexion, creerCompte, creerCompteAdmin, deconnexion,
     lister, listerPar, lireLigne, inserer, mettreAJour, supprimerLigne, rpc,
   };

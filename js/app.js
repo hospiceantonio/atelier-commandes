@@ -84,18 +84,25 @@
 
   function ecranAbonnementExpire() {
     const r = Store.lireReglages();
+    const paiementPossible = typeof Paiement !== "undefined" && Paiement.disponible();
     afficherVoile(boiteVoile(
       "Abonnement expiré",
       "L'accès à <strong>" + Utils.echapper(r.nomAtelier) + "</strong> est suspendu. " +
         "Réglez l'abonnement de " +
         "<strong>" + Utils.fmtMontant(r.abonnementMensuel, r.devise) + " / mois</strong> " +
-        "auprès de votre fournisseur pour rouvrir l'application. " +
+        (paiementPossible ? "pour rouvrir l'application. " : "auprès de votre fournisseur pour rouvrir l'application. ") +
         "Vos données sont intactes.",
-      '<div class="btn-rangee" style="margin-top:6px">' +
+      (paiementPossible
+        ? '<button type="button" class="btn btn-or btn-bloc" id="voile-payer" style="margin-top:6px">' +
+            "Payer " + Utils.fmtMontant(r.abonnementMensuel, r.devise) + " par Mobile Money / carte</button>"
+        : "") +
+      '<div class="btn-rangee" style="margin-top:10px">' +
         '<button type="button" class="btn btn-clair" id="voile-verifier">Vérifier à nouveau</button>' +
         '<button type="button" class="btn" id="voile-deconnexion">Se déconnecter</button>' +
       "</div>"
     ));
+    const boutonPayer = document.getElementById("voile-payer");
+    if (boutonPayer) boutonPayer.onclick = () => Paiement.payer();
     document.getElementById("voile-verifier").onclick = async () => {
       await Api.rafraichirAtelier();
       naviguer();

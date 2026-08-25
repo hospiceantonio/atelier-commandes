@@ -201,6 +201,10 @@ const VueSuperAdmin = (() => {
     if (!atelier) { location.hash = "#/"; return; }
     const admins = await Api.listerPar("profils", "atelier_id", id);
     const admin = admins[0] || null;
+    let paiements = [];
+    try {
+      paiements = await Api.listerPar("paiements_abonnement", "atelier_id", id, "cree_le", false);
+    } catch (_) { /* base pas encore à jour : pas de journal */ }
 
     UI.entete({
       titre: atelier.nom,
@@ -236,6 +240,20 @@ const VueSuperAdmin = (() => {
           '<button type="button" class="btn btn-clair" id="fa-suspendre">Suspendre maintenant</button>' +
         "</div>" +
       "</div>" +
+
+      (paiements.length
+        ? '<div class="carte">' +
+            '<div class="carte-titre">' + UI.icone("stats", "ic-sm") + "Paiements Mobile Money reçus</div>" +
+            '<div class="paires">' +
+            paiements.map((p) =>
+              '<div class="paire"><span class="l">' +
+                Utils.fmtDate(Utils.isoJour(new Date(p.cree_le))) +
+                " · " + p.mois + " mois</span><span class='v vert'>" +
+                Utils.fmtMontant(p.montant, atelier.devise) + "</span></div>"
+            ).join("") +
+            "</div>" +
+          "</div>"
+        : "") +
 
       '<div class="carte">' +
         '<div class="carte-titre">' + UI.icone("clients", "ic-sm") + "Administrateur</div>" +
@@ -325,6 +343,7 @@ const VueSuperAdmin = (() => {
 
   async function compte(vue) {
     const profil = Api.lireProfil();
+    const prm = Api.lireParametres();
     UI.entete({ titre: "Mon compte", sous: "Superadministrateur", retour: true });
     vue.innerHTML =
       '<div class="carte">' +
@@ -334,7 +353,50 @@ const VueSuperAdmin = (() => {
           '<div class="paire"><span class="l">Rôle</span><span class="v">Superadministrateur</span></div>' +
         "</div>" +
       "</div>" +
+
+      (prm
+        ? '<form id="form-kkiapay">' +
+            '<div class="carte">' +
+              '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Paiement en ligne (KKiaPay)</div>" +
+              '<div class="champ"><label for="sa-kkiapay-cle">Clé publique KKiaPay</label>' +
+                '<input id="sa-kkiapay-cle" autocomplete="off" spellcheck="false" value="' + e(prm.kkiapay_cle_publique) + '">' +
+                '<div class="aide">Laissez vide pour désactiver le paiement en ligne : les administrateurs ' +
+                  "verront alors seulement « contactez votre fournisseur ».</div></div>" +
+              '<label class="interrupteur" style="display:flex">' +
+                '<input type="checkbox" id="sa-kkiapay-sandbox"' + (prm.kkiapay_sandbox ? " checked" : "") + ">" +
+                "<span>Mode <strong>bac à sable</strong> (paiements de test — clé publique sandbox, " +
+                  "numéro de test 97000000)</span>" +
+              "</label>" +
+              '<div class="aide" style="margin-top:8px">La clé, le webhook et le mode (bac à sable ou réel) ' +
+                "doivent être du même côté dans le tableau de bord KKiaPay.</div>" +
+              '<button type="submit" class="btn btn-bloc" style="margin-top:12px">' +
+                UI.icone("check", "ic-sm") + "Enregistrer</button>" +
+            "</div>" +
+          "</form>"
+        : '<div class="carte">' +
+            '<div class="carte-titre">Paiement en ligne (KKiaPay)</div>' +
+            '<p style="margin:0;font-size:13px;line-height:1.5;color:var(--encre-douce)">' +
+              "Mettez la base à jour (exécutez <code>supabase/schema.sql</code> dans l'éditeur SQL " +
+              "de Supabase) puis reconnectez-vous pour configurer le paiement en ligne.</p>" +
+          "</div>") +
+
       '<button type="button" class="btn btn-danger btn-bloc" id="sa-deconnexion">Se déconnecter</button>';
+
+    const formulaireKkiapay = UI.$("#form-kkiapay");
+    if (formulaireKkiapay) {
+      formulaireKkiapay.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        try {
+          await Api.majParametres({
+            kkiapay_cle_publique: UI.$("#sa-kkiapay-cle").value.trim(),
+            kkiapay_sandbox: UI.$("#sa-kkiapay-sandbox").checked,
+          });
+          UI.toast("Réglages de paiement enregistrés", "ok");
+        } catch (err) {
+          UI.toast(err.message || "Enregistrement impossible", "erreur");
+        }
+      });
+    }
 
     UI.$("#sa-deconnexion").onclick = async () => {
       await Api.deconnexion();
