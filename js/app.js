@@ -128,7 +128,12 @@
     if (!Api.connecte()) {
       document.body.classList.remove("mode-superadmin");
       vue.innerHTML = "";
-      VueConnexion.afficher();
+      // Ne pas re-rendre si un formulaire de connexion ou d'inscription est
+      // déjà affiché : un second rendu (hash + appel direct) effacerait la
+      // saisie en cours.
+      if (!document.getElementById("form-connexion") && !document.getElementById("form-inscription")) {
+        VueConnexion.afficher();
+      }
       return;
     }
 

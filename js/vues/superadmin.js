@@ -18,6 +18,73 @@ const VueSuperAdmin = (() => {
     return '<span class="badge badge-danger">Expiré</span>';
   }
 
+  /* ---------- Rappels d'échéance (message WhatsApp prêt à envoyer) ---------- */
+
+  const RELANCE_AVANT_JOURS = 5;   // à relancer dès J-5…
+  const RELANCE_APRES_JOURS = 45;  // …et jusqu'à 45 jours après l'expiration
+
+  function messageRelance(a) {
+    const jours = Math.ceil((finAbonnement(a) - Date.now()) / 86400000);
+    const date = Utils.fmtDate(Utils.isoJour(new Date(a.abonnement_fin)));
+    const montant = Utils.fmtMontant(a.abonnement_mensuel, a.devise) + " / mois";
+    if (jours > 0) {
+      return "Bonjour " + a.nom + " 👋\n" +
+        "Votre abonnement à l'application Atelier expire le " + date +
+        " (dans " + jours + " jour" + (jours > 1 ? "s" : "") + ").\n" +
+        "Pour continuer sans interruption, renouvelez directement dans l'application : " +
+        "Réglages → « Renouveler » — Mobile Money (MTN/Moov) ou carte (" + montant + ").\n" +
+        "Merci pour votre confiance !";
+    }
+    return "Bonjour " + a.nom + " 👋\n" +
+      "Votre abonnement à l'application Atelier a expiré le " + date +
+      " : l'accès est suspendu, mais toutes vos données sont intactes.\n" +
+      "Pour rouvrir l'application, payez directement sur l'écran affiché à la connexion — " +
+      "Mobile Money (MTN/Moov) ou carte (" + montant + ").\n" +
+      "Merci pour votre confiance !";
+  }
+
+  function carteRelances(ateliers, adminParAtelier) {
+    const maintenant = Date.now();
+    const aRelancer = ateliers
+      .filter((a) => {
+        const reste = finAbonnement(a) - maintenant;
+        return reste < RELANCE_AVANT_JOURS * 86400000 && reste > -RELANCE_APRES_JOURS * 86400000;
+      })
+      .sort((x, y) => finAbonnement(x) - finAbonnement(y));
+    if (!aRelancer.length) return "";
+
+    return (
+      '<div class="carte" id="carte-relances">' +
+        '<div class="carte-titre">' + UI.icone("alerte", "ic-sm") + "À relancer</div>" +
+        aRelancer.map((a, i) => {
+          const admin = adminParAtelier[a.id];
+          const jours = Math.ceil((finAbonnement(a) - maintenant) / 86400000);
+          const statut = jours > 0
+            ? "Expire dans " + jours + " jour" + (jours > 1 ? "s" : "")
+            : (jours === 0 ? "Expire aujourd'hui" : "Expiré depuis " + (-jours) + " jour" + (jours < -1 ? "s" : ""));
+          const numero = a.tel_whatsapp || a.tel_appel || (admin && admin.telephone) || "";
+          return (
+            '<div style="display:flex;align-items:center;gap:10px;padding:9px 0' +
+              (i ? ";border-top:1px solid var(--trait)" : "") + '">' +
+              '<div style="flex:1;min-width:0;cursor:pointer" data-nav="#/atelier-gere/' + a.id + '">' +
+                '<div class="ligne-titre">' + e(a.nom) + "</div>" +
+                '<div class="ligne-sous" style="color:' + (jours > 0 ? "var(--or-fonce)" : "var(--rouge)") + '">' +
+                  statut + "</div>" +
+              "</div>" +
+              (numero
+                ? '<a class="btn btn-sm btn-or" target="_blank" rel="noopener" data-relance href="' +
+                    Utils.lienWhatsApp(numero, messageRelance(a), a.indicatif) + '">' +
+                    UI.icone("whatsapp", "ic-sm") + "Relancer</a>"
+                : '<span style="font-size:12px;color:var(--encre-tres-douce)">Sans n° WhatsApp</span>') +
+            "</div>"
+          );
+        }).join("") +
+        '<div class="aide" style="margin-top:8px">Un appui ouvre WhatsApp avec le message de rappel déjà écrit ' +
+          "— il ne reste qu'à l'envoyer.</div>" +
+      "</div>"
+    );
+  }
+
   /* ---------- Liste des ateliers ---------- */
 
   async function liste(vue) {
@@ -46,6 +113,7 @@ const VueSuperAdmin = (() => {
     }
 
     vue.innerHTML =
+      carteRelances(ateliers, adminParAtelier) +
       '<div class="liste">' +
       ateliers.map((a) => {
         const admin = adminParAtelier[a.id];
