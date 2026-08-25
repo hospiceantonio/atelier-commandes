@@ -377,6 +377,12 @@ details.bloc > .contenu{padding:0 14px 14px}
 .visionneuse img{max-width:100%;max-height:100%;object-fit:contain;border-radius:var(--r-sm)}
 .visionneuse-fermer{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;color:#fff;background:rgba(255,255,255,.16)}
 
+/* ---------- Mode superadministrateur ---------- */
+.mode-superadmin .tabbar{display:none}
+.mode-superadmin .vue{padding-bottom:28px}
+
+.logo-apercu{width:64px;height:64px;border-radius:14px;object-fit:cover;background:var(--indigo-50);flex:none}
+
 /* ---------- Écran de licence ---------- */
 .voile-licence{
   position:fixed;inset:0;z-index:90;

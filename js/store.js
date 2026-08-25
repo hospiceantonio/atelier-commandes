@@ -1,12 +1,8 @@
 /* =========================================================
-   Store — logique métier au-dessus de la base locale.
-
-   Client   : { id, prenom, nom, tel, note, mesures{}, creeLe, modifieLe }
-   Commande : { id, numero, clientId, description, statut,
-                creeLe, dateLivraison, montant, paiements[],
-                livreLe, modifieLe }
-   Paiement : { id, montant, date, note }   (le 1er = acompte)
-   Photo    : { id, commandeId, dataUrl, creeLe }
+   Store — logique métier au-dessus de Supabase (via Api).
+   Les vues gardent les mêmes appels qu'avant : le Store
+   traduit les colonnes de la base (snake_case) vers les
+   objets de l'application (camelCase).
    ========================================================= */
 const Store = (() => {
 
@@ -16,12 +12,10 @@ const Store = (() => {
     livree: { label: "Livrée", badge: "badge-fait" },
   };
 
-  const REGLAGES_DEFAUT = {
-    cle: "general",
-    nomAtelier: "Mon atelier",
+  const DEFAUTS = {
+    nomAtelier: "Atelier",
     devise: "FCFA",
     indicatif: "229",
-    prochainNumero: 1,
     modeleWhatsApp:
       "Bonjour {prenom} 👋\n" +
       "Votre commande {numero} chez {atelier} :\n" +
@@ -37,61 +31,116 @@ const Store = (() => {
       "Reste à payer : {solde}.",
   };
 
-  let reglages = { ...REGLAGES_DEFAUT };
-
-  async function init() {
-    const enregistres = await DB.lire("reglages", "general");
-    if (enregistres) reglages = { ...REGLAGES_DEFAUT, ...enregistres };
-    else await DB.ecrire("reglages", reglages);
-    DB.rendrePersistant();
-  }
+  /* ---------- Réglages = atelier du compte connecté ---------- */
 
   function lireReglages() {
-    return { ...reglages };
+    const a = Api.lireAtelier();
+    if (!a) {
+      return {
+        ...DEFAUTS, slogan: "", logo: "", telWhatsAppAtelier: "", telAppelAtelier: "",
+        abonnementMensuel: 0, abonnementFin: null,
+      };
+    }
+    return {
+      nomAtelier: a.nom || DEFAUTS.nomAtelier,
+      slogan: a.slogan || "",
+      logo: a.logo || "",
+      devise: a.devise || DEFAUTS.devise,
+      indicatif: a.indicatif || DEFAUTS.indicatif,
+      telWhatsAppAtelier: a.tel_whatsapp || "",
+      telAppelAtelier: a.tel_appel || "",
+      modeleWhatsApp: a.modele_whatsapp || DEFAUTS.modeleWhatsApp,
+      modeleWhatsAppPret: a.modele_whatsapp_pret || DEFAUTS.modeleWhatsAppPret,
+      abonnementMensuel: Number(a.abonnement_mensuel) || 0,
+      abonnementFin: a.abonnement_fin || null,
+    };
   }
 
+  /** Champs de l'atelier modifiables par son administrateur. */
   async function majReglages(maj) {
-    reglages = { ...reglages, ...maj, cle: "general" };
-    await DB.ecrire("reglages", reglages);
+    const objet = {};
+    if (maj.slogan !== undefined) objet.slogan = maj.slogan;
+    if (maj.logo !== undefined) objet.logo = maj.logo;
+    if (maj.telWhatsAppAtelier !== undefined) objet.tel_whatsapp = maj.telWhatsAppAtelier;
+    if (maj.telAppelAtelier !== undefined) objet.tel_appel = maj.telAppelAtelier;
+    if (maj.modeleWhatsApp !== undefined) objet.modele_whatsapp = maj.modeleWhatsApp;
+    if (maj.modeleWhatsAppPret !== undefined) objet.modele_whatsapp_pret = maj.modeleWhatsAppPret;
+    if (!Object.keys(objet).length) return lireReglages();
+    await Api.mettreAJour("ateliers", Api.atelierId(), objet);
+    await Api.rafraichirAtelier();
     return lireReglages();
   }
+
+  /** Bandeau d'alerte quand la fin d'abonnement approche (≤ 5 jours). */
+  function bandeauAbonnement() {
+    const r = lireReglages();
+    if (!r.abonnementFin) return "";
+    const jours = Math.ceil((new Date(r.abonnementFin).getTime() - Date.now()) / 86400000);
+    if (jours > 5 || jours < 0) return "";
+    const n = Math.max(1, jours);
+    return (
+      '<div class="alerte">' + UI.icone("horloge") +
+      "<div><strong>Abonnement : " + n + " jour" + (n > 1 ? "s" : "") + " restant" + (n > 1 ? "s" : "") +
+      ".</strong> Contactez votre fournisseur pour renouveler et éviter la coupure.</div></div>"
+    );
+  }
+
+  /* ---------- Traduction base <-> application ---------- */
+
+  const clientVersApp = (l) => l && {
+    id: l.id, prenom: l.prenom || "", nom: l.nom || "", tel: l.tel || "",
+    telWhatsApp: l.tel_whatsapp || "", note: l.note || "", mesures: l.mesures || {},
+    creeLe: l.cree_le, modifieLe: l.modifie_le,
+  };
+
+  const commandeVersApp = (l) => l && {
+    id: l.id, numero: l.numero, clientId: l.client_id, description: l.description || "",
+    statut: l.statut, dateLivraison: l.date_livraison, montant: Number(l.montant) || 0,
+    paiements: l.paiements || [], livreLe: l.livre_le, creeLe: l.cree_le, modifieLe: l.modifie_le,
+  };
+
+  const photoVersApp = (l) => l && {
+    id: l.id, commandeId: l.commande_id, dataUrl: l.data_url, creeLe: l.cree_le,
+  };
+
+  const depenseVersApp = (l) => l && {
+    id: l.id, libelle: l.libelle, montant: Number(l.montant) || 0,
+    dateDepense: l.date_depense, note: l.note || "", creeLe: l.cree_le,
+  };
 
   /* ---------- Clients ---------- */
 
   async function listerClients() {
-    const clients = await DB.lireTout("clients");
+    const clients = (await Api.lister("clients")).map(clientVersApp);
     clients.sort((a, b) =>
       Utils.sansAccent(Utils.nomComplet(a)).localeCompare(Utils.sansAccent(Utils.nomComplet(b)), "fr"));
     return clients;
   }
 
-  const lireClient = (id) => DB.lire("clients", id);
+  const lireClient = async (id) => clientVersApp(await Api.lireLigne("clients", id));
 
   async function sauverClient(donnees) {
-    const maintenant = Date.now();
-    const existant = donnees.id ? await DB.lire("clients", donnees.id) : null;
-    const client = {
-      id: donnees.id || Utils.uid("cli"),
-      prenom: (donnees.prenom || "").trim(),
-      nom: (donnees.nom || "").trim(),
+    const prenom = (donnees.prenom || "").trim();
+    const nom = (donnees.nom || "").trim();
+    if (!prenom && !nom) throw new Error("Le nom du client est obligatoire.");
+    const objet = {
+      prenom, nom,
       tel: (donnees.tel || "").trim(),
-      telWhatsApp: (donnees.telWhatsApp || "").trim(),
+      tel_whatsapp: (donnees.telWhatsApp || "").trim(),
       note: (donnees.note || "").trim(),
-      mesures: Mesures.nettoyer(donnees.mesures !== undefined ? donnees.mesures : (existant && existant.mesures)),
-      creeLe: existant ? existant.creeLe : maintenant,
-      modifieLe: maintenant,
     };
-    if (!client.prenom && !client.nom) throw new Error("Le nom du client est obligatoire.");
-    await DB.ecrire("clients", client);
-    return client;
+    if (donnees.mesures !== undefined) objet.mesures = Mesures.nettoyer(donnees.mesures);
+    if (donnees.id) {
+      objet.modifie_le = new Date().toISOString();
+      return clientVersApp(await Api.mettreAJour("clients", donnees.id, objet));
+    }
+    objet.atelier_id = Api.atelierId();
+    if (objet.mesures === undefined) objet.mesures = {};
+    return clientVersApp(await Api.inserer("clients", objet));
   }
 
-  /** Supprime le client ET ses commandes (photos comprises). */
-  async function supprimerClient(id) {
-    const commandes = await DB.lireParIndex("commandes", "clientId", id);
-    for (const c of commandes) await supprimerCommande(c.id);
-    await DB.supprimer("clients", id);
-  }
+  /** La base supprime en cascade les commandes et photos du client. */
+  const supprimerClient = (id) => Api.supprimerLigne("clients", id);
 
   function chercherClients(clients, terme) {
     const t = Utils.sansAccent(terme).trim();
@@ -103,118 +152,99 @@ const Store = (() => {
     });
   }
 
-  /* ---------- Numérotation des commandes ---------- */
-
-  /** "CMD-2026-0042" : lisible au téléphone comme sur un reçu. */
-  function formaterNumero(n, annee) {
-    return "CMD-" + annee + "-" + Utils.pad(n, 4);
-  }
-
-  async function reserverNumero() {
-    const n = reglages.prochainNumero || 1;
-    await majReglages({ prochainNumero: n + 1 });
-    return formaterNumero(n, new Date().getFullYear());
-  }
-
   /* ---------- Commandes ---------- */
 
   async function listerCommandes() {
-    const commandes = await DB.lireTout("commandes");
-    commandes.sort((a, b) => b.creeLe - a.creeLe);
-    return commandes;
+    return (await Api.lister("commandes", "cree_le", false)).map(commandeVersApp);
   }
 
-  const lireCommande = (id) => DB.lire("commandes", id);
-  const commandesDuClient = (clientId) => DB.lireParIndex("commandes", "clientId", clientId);
+  const lireCommande = async (id) => commandeVersApp(await Api.lireLigne("commandes", id));
 
-  /**
-   * Crée ou met à jour une commande.
-   * `donnees.acompte` n'est utilisé qu'à la création (premier paiement).
-   */
+  const commandesDuClient = async (clientId) =>
+    (await Api.listerPar("commandes", "client_id", clientId)).map(commandeVersApp);
+
   async function sauverCommande(donnees) {
-    const maintenant = Date.now();
-    const existante = donnees.id ? await DB.lire("commandes", donnees.id) : null;
-
     if (!donnees.clientId) throw new Error("Choisissez un client pour la commande.");
     const montant = Math.max(0, Utils.lireNombre(donnees.montant));
 
-    const commande = {
-      id: existante ? existante.id : Utils.uid("cmd"),
-      numero: existante ? existante.numero : await reserverNumero(),
-      clientId: donnees.clientId,
-      description: (donnees.description || "").trim(),
-      statut: donnees.statut || (existante ? existante.statut : "en_cours"),
-      creeLe: existante ? existante.creeLe : maintenant,
-      dateLivraison: donnees.dateLivraison || Utils.aujourdhui(),
-      montant,
-      paiements: existante ? existante.paiements.slice() : [],
-      livreLe: existante ? existante.livreLe : null,
-      modifieLe: maintenant,
-    };
-
-    if (!existante) {
-      const acompte = Math.max(0, Utils.lireNombre(donnees.acompte));
-      if (acompte > 0) {
-        commande.paiements.push({
-          id: Utils.uid("pay"),
-          montant: Math.min(acompte, montant || acompte),
-          date: maintenant,
-          note: "Acompte",
-        });
-      }
+    if (donnees.id) {
+      const existante = await lireCommande(donnees.id);
+      if (!existante) throw new Error("Commande introuvable.");
+      const statut = donnees.statut || existante.statut;
+      return commandeVersApp(await Api.mettreAJour("commandes", donnees.id, {
+        description: (donnees.description || "").trim(),
+        date_livraison: donnees.dateLivraison || existante.dateLivraison,
+        montant,
+        statut,
+        livre_le: statut === "livree" ? (existante.livreLe || new Date().toISOString()) : null,
+        modifie_le: new Date().toISOString(),
+      }));
     }
 
-    majStatutLivraison(commande);
-    await DB.ecrire("commandes", commande);
-    return commande;
-  }
-
-  function majStatutLivraison(commande) {
-    if (commande.statut === "livree" && !commande.livreLe) commande.livreLe = Date.now();
-    if (commande.statut !== "livree") commande.livreLe = null;
+    const numero = await Api.rpc("numero_commande_suivant");
+    const paiements = [];
+    const acompte = Math.max(0, Utils.lireNombre(donnees.acompte));
+    if (acompte > 0) {
+      paiements.push({
+        id: Utils.uid("pay"),
+        montant: Math.min(acompte, montant || acompte),
+        date: Date.now(),
+        note: "Acompte",
+      });
+    }
+    return commandeVersApp(await Api.inserer("commandes", {
+      atelier_id: Api.atelierId(),
+      numero,
+      client_id: donnees.clientId,
+      description: (donnees.description || "").trim(),
+      statut: "en_cours",
+      date_livraison: donnees.dateLivraison || Utils.aujourdhui(),
+      montant,
+      paiements,
+    }));
   }
 
   async function changerStatut(id, statut) {
-    const commande = await DB.lire("commandes", id);
+    const commande = await lireCommande(id);
     if (!commande) throw new Error("Commande introuvable.");
-    commande.statut = statut;
-    commande.modifieLe = Date.now();
-    majStatutLivraison(commande);
-    await DB.ecrire("commandes", commande);
-    return commande;
+    return commandeVersApp(await Api.mettreAJour("commandes", id, {
+      statut,
+      livre_le: statut === "livree" ? (commande.livreLe || new Date().toISOString()) : null,
+      modifie_le: new Date().toISOString(),
+    }));
   }
 
   async function ajouterPaiement(id, montant, note) {
-    const commande = await DB.lire("commandes", id);
+    const commande = await lireCommande(id);
     if (!commande) throw new Error("Commande introuvable.");
     const v = Utils.lireNombre(montant);
     if (v <= 0) throw new Error("Le montant doit être supérieur à zéro.");
     const solde = soldeRestant(commande);
-    if (v > solde) throw new Error("Ce paiement dépasse le solde restant (" + Utils.fmtMontant(solde, reglages.devise) + ").");
-    commande.paiements.push({
+    if (v > solde) {
+      throw new Error("Ce paiement dépasse le solde restant (" +
+        Utils.fmtMontant(solde, lireReglages().devise) + ").");
+    }
+    const paiements = commande.paiements.concat([{
       id: Utils.uid("pay"),
       montant: v,
       date: Date.now(),
       note: (note || "").trim() || (commande.paiements.length ? "Versement" : "Acompte"),
-    });
-    commande.modifieLe = Date.now();
-    await DB.ecrire("commandes", commande);
-    return commande;
+    }]);
+    return commandeVersApp(await Api.mettreAJour("commandes", id, {
+      paiements, modifie_le: new Date().toISOString(),
+    }));
   }
 
   async function retirerPaiement(idCommande, idPaiement) {
-    const commande = await DB.lire("commandes", idCommande);
+    const commande = await lireCommande(idCommande);
     if (!commande) throw new Error("Commande introuvable.");
-    commande.paiements = commande.paiements.filter((p) => p.id !== idPaiement);
-    commande.modifieLe = Date.now();
-    await DB.ecrire("commandes", commande);
-    return commande;
+    return commandeVersApp(await Api.mettreAJour("commandes", idCommande, {
+      paiements: commande.paiements.filter((p) => p.id !== idPaiement),
+      modifie_le: new Date().toISOString(),
+    }));
   }
 
-  async function supprimerCommande(id) {
-    await DB.supprimerParIndex("photos", "commandeId", id);
-    await DB.supprimer("commandes", id);
-  }
+  const supprimerCommande = (id) => Api.supprimerLigne("commandes", id);
 
   /* ---------- Calculs ---------- */
 
@@ -232,33 +262,42 @@ const Store = (() => {
 
   /* ---------- Photos ---------- */
 
-  const photosDeCommande = async (commandeId) => {
-    const photos = await DB.lireParIndex("photos", "commandeId", commandeId);
-    photos.sort((a, b) => a.creeLe - b.creeLe);
-    return photos;
-  };
+  const photosDeCommande = async (commandeId) =>
+    (await Api.listerPar("photos", "commande_id", commandeId, "cree_le", true)).map(photoVersApp);
 
-  async function ajouterPhoto(commandeId, dataUrl) {
-    const photo = { id: Utils.uid("pho"), commandeId, dataUrl, creeLe: Date.now() };
-    await DB.ecrire("photos", photo);
-    return photo;
+  const ajouterPhoto = async (commandeId, dataUrl) =>
+    photoVersApp(await Api.inserer("photos", {
+      atelier_id: Api.atelierId(), commande_id: commandeId, data_url: dataUrl,
+    }));
+
+  const supprimerPhoto = (id) => Api.supprimerLigne("photos", id);
+
+  /* ---------- Dépenses ---------- */
+
+  async function listerDepenses() {
+    return (await Api.lister("depenses", "date_depense", false)).map(depenseVersApp);
   }
 
-  const supprimerPhoto = (id) => DB.supprimer("photos", id);
-
-  async function nombrePhotosParCommande() {
-    const photos = await DB.lireTout("photos");
-    const table = {};
-    for (const p of photos) table[p.commandeId] = (table[p.commandeId] || 0) + 1;
-    return table;
+  async function ajouterDepense(donnees) {
+    const libelle = (donnees.libelle || "").trim();
+    const montant = Utils.lireNombre(donnees.montant);
+    if (!libelle) throw new Error("Indiquez le libellé de la dépense.");
+    if (montant <= 0) throw new Error("Le montant doit être supérieur à zéro.");
+    return depenseVersApp(await Api.inserer("depenses", {
+      atelier_id: Api.atelierId(),
+      libelle,
+      montant,
+      date_depense: donnees.dateDepense || Utils.aujourdhui(),
+      note: (donnees.note || "").trim(),
+    }));
   }
 
-  /* ---------- Statistiques de recettes ----------
-     Une recette = un paiement encaissé (acompte ou versement),
-     compté le jour où l'argent est reçu. */
+  const supprimerDepense = (id) => Api.supprimerLigne("depenses", id);
+
+  /* ---------- Statistiques (recettes et dépenses) ---------- */
 
   async function paiementsSurPeriode(isoDebut, isoFin) {
-    const commandes = await DB.lireTout("commandes");
+    const commandes = await listerCommandes();
     const debut = Utils.versDate(isoDebut);
     const fin = Utils.versDate(isoFin);
     if (fin) fin.setHours(23, 59, 59, 999);
@@ -271,13 +310,12 @@ const Store = (() => {
         liste.push({ ...p, commande: c });
       }
     }
-    liste.sort((a, b) => b.date - a.date);
+    liste.sort((a, b) => new Date(b.date) - new Date(a.date));
     return liste;
   }
 
   async function statsPeriode(isoDebut, isoFin) {
-    const paiements = await paiementsSurPeriode(isoDebut, isoFin);
-    const commandes = await DB.lireTout("commandes");
+    const [commandes, toutesDepenses] = await Promise.all([listerCommandes(), listerDepenses()]);
 
     const debut = Utils.versDate(isoDebut);
     const fin = Utils.versDate(isoFin);
@@ -287,16 +325,26 @@ const Store = (() => {
       return (!debut || d >= debut) && (!fin || d <= fin);
     };
 
+    const paiements = [];
+    for (const c of commandes) {
+      for (const p of c.paiements || []) {
+        if (dansPeriode(p.date)) paiements.push({ ...p, commande: c });
+      }
+    }
+    paiements.sort((a, b) => new Date(b.date) - new Date(a.date));
+
     const commandesCreees = commandes.filter((c) => dansPeriode(c.creeLe));
     const commandesLivrees = commandes.filter((c) => c.livreLe && dansPeriode(c.livreLe));
+    const depenses = toutesDepenses.filter((d) =>
+      (!isoDebut || d.dateDepense >= isoDebut) && (!isoFin || d.dateDepense <= isoFin));
 
     const recettes = paiements.reduce((somme, p) => somme + (Number(p.montant) || 0), 0);
+    const totalDepenses = depenses.reduce((somme, d) => somme + d.montant, 0);
     const montantCommandes = commandesCreees.reduce((somme, c) => somme + (Number(c.montant) || 0), 0);
     const soldesOuverts = commandes
       .filter((c) => c.statut !== "livree" || soldeRestant(c) > 0)
       .reduce((somme, c) => somme + soldeRestant(c), 0);
 
-    /* Recettes regroupées par jour pour le graphique. */
     const parJour = {};
     for (const p of paiements) {
       const jour = Utils.isoJour(new Date(p.date));
@@ -307,6 +355,9 @@ const Store = (() => {
       recettes,
       nbPaiements: paiements.length,
       paiements,
+      depenses,
+      totalDepenses,
+      benefice: recettes - totalDepenses,
       commandesCreees: commandesCreees.length,
       commandesLivrees: commandesLivrees.length,
       montantCommandes,
@@ -318,7 +369,7 @@ const Store = (() => {
   /* ---------- Messages WhatsApp ---------- */
 
   function messageCommande(commande, client, modele) {
-    const r = reglages;
+    const r = lireReglages();
     return Utils.remplirModele(modele || r.modeleWhatsApp, {
       prenom: client && client.prenom ? client.prenom : Utils.nomComplet(client),
       nom: Utils.nomComplet(client),
@@ -332,49 +383,29 @@ const Store = (() => {
     });
   }
 
-  /* ---------- Sauvegarde / restauration ---------- */
+  /* ---------- Export (copie de secours lisible) ---------- */
 
   async function exporter() {
-    const [clients, commandes, photos, licence] = await Promise.all([
-      DB.lireTout("clients"), DB.lireTout("commandes"), DB.lireTout("photos"),
-      DB.lire("reglages", "licence"),
+    const [clients, commandes, depenses] = await Promise.all([
+      listerClients(), listerCommandes(), listerDepenses(),
     ]);
     return {
       application: "atelier",
-      version: 1,
+      version: 2,
       exporteLe: new Date().toISOString(),
-      reglages: lireReglages(),
-      licence: licence || null,
-      clients, commandes, photos,
-    };
-  }
-
-  async function importer(donnees) {
-    if (!donnees || donnees.application !== "atelier" || !Array.isArray(donnees.clients)) {
-      throw new Error("Ce fichier n'est pas une sauvegarde de l'application.");
-    }
-    await Promise.all([DB.vider("clients"), DB.vider("commandes"), DB.vider("photos")]);
-    await DB.ecrireLot("clients", donnees.clients);
-    await DB.ecrireLot("commandes", donnees.commandes || []);
-    // Les photos une par une : un lot trop gros peut dépasser la mémoire d'une transaction.
-    for (const photo of donnees.photos || []) await DB.ecrire("photos", photo);
-    if (donnees.reglages) await majReglages({ ...donnees.reglages, cle: "general" });
-    if (donnees.licence && donnees.licence.cle === "licence") await DB.ecrire("reglages", donnees.licence);
-    return {
-      clients: donnees.clients.length,
-      commandes: (donnees.commandes || []).length,
-      photos: (donnees.photos || []).length,
+      atelier: lireReglages(),
+      clients, commandes, depenses,
     };
   }
 
   return {
-    STATUTS, init, lireReglages, majReglages,
+    STATUTS, lireReglages, majReglages, bandeauAbonnement,
     listerClients, lireClient, sauverClient, supprimerClient, chercherClients,
     listerCommandes, lireCommande, commandesDuClient, sauverCommande,
     changerStatut, ajouterPaiement, retirerPaiement, supprimerCommande,
     totalPaye, acompteVerse, soldeRestant, estEnRetard,
-    photosDeCommande, ajouterPhoto, supprimerPhoto, nombrePhotosParCommande,
-    paiementsSurPeriode, statsPeriode, messageCommande,
-    exporter, importer, formaterNumero,
+    photosDeCommande, ajouterPhoto, supprimerPhoto,
+    listerDepenses, ajouterDepense, supprimerDepense,
+    paiementsSurPeriode, statsPeriode, messageCommande, exporter,
   };
 })();

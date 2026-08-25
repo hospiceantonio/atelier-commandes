@@ -1,12 +1,21 @@
-# Atelier — Gestion des commandes pour tailleurs
+# Atelier — Gestion des commandes pour ateliers de couture (SaaS)
 
-Application mobile (PWA) de gestion d'un atelier de couture : clients et
-mesures, commandes avec photos des tissus, acomptes et soldes, messages
-WhatsApp, statistiques des recettes par période.
+Application web hébergée, accessible partout et à tout moment, adossée à
+une base **Supabase** (voir `supabase/INSTALLATION.md` pour la mise en
+service et `supabase/schema.sql` pour le schéma complet avec règles RLS).
 
-**100 % hors ligne** : toutes les données restent sur le téléphone
-(IndexedDB). Aucun serveur, aucun compte, aucune connexion requise après
-l'installation.
+Deux rôles :
+
+- **Superadministrateur** : crée les comptes administrateurs et leurs
+  ateliers (nom, logo, slogan, numéros WhatsApp/appel, devise, indicatif,
+  montant de l'abonnement mensuel), prolonge ou suspend les abonnements.
+- **Administrateur (= un atelier)** : gère ses clients et leurs mesures,
+  ses commandes avec photos des tissus, ses acomptes et versements, ses
+  dépenses et ses recettes. Chaque atelier ne voit que ses données
+  (isolation garantie côté serveur par le RLS).
+
+À la création, un atelier reçoit 14 jours d'accès ; l'écran de blocage
+s'affiche ensuite tant que l'abonnement n'est pas prolongé.
 
 ## Fonctionnalités
 
@@ -41,26 +50,6 @@ l'installation.
   à garder sur WhatsApp, e-mail ou carte mémoire.
 - Réglages : nom de l'atelier, devise (FCFA par défaut), indicatif pays
   pour WhatsApp (229 par défaut), modèles de messages.
-
-## Licence (application payante)
-
-L'application offre un essai gratuit puis se bloque : abonnement mensuel
-via KKiaPay, ou code de déblocage valable un mois (destiné aux
-commerciaux qui présentent l'application, à ressaisir chaque mois).
-Tout se configure en tête de `js/licence.js` :
-
-- `prixMensuel` (5 000 FCFA), `joursEssai` (14), `joursParPaiement` (31) ;
-- `cleKkiapayPublique` : clé **publique** du compte KKiaPay du vendeur
-  (kkiapay.me → Développeurs). Tant qu'elle est vide, seul le code de
-  déblocage est proposé ;
-- `contactVendeur` : numéro affiché sur l'écran de blocage ;
-- `empreintesCodes` : empreintes SHA-256 des codes valides. Générer de
-  nouveaux codes avec `node tools/generer-codes.js 10` — remettre les
-  codes aux clients, coller les empreintes ici. Les codes en clair ne
-  doivent jamais être commités.
-
-Le blocage étant vérifié dans l'application (pas de serveur), il protège
-contre l'usage ordinaire, pas contre un développeur qui modifie le code.
 
 ## Application Android (APK)
 

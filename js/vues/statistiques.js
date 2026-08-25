@@ -1,7 +1,8 @@
 /* =========================================================
-   Vue Recettes — statistiques par période :
+   Vue Recettes & Dépenses — statistiques par période :
    aujourd'hui / semaine / mois / année / période libre,
-   graphique des encaissements, journal des versements.
+   graphique des encaissements, gestion des dépenses,
+   bénéfice, journal des versements.
    ========================================================= */
 const VueStats = (() => {
   const e = Utils.echapper;
@@ -35,7 +36,7 @@ const VueStats = (() => {
   }
 
   async function afficher(vue) {
-    UI.entete({ titre: "Recettes", sous: "Chaque versement encaissé compte le jour où il est reçu" });
+    UI.entete({ titre: "Recettes & Dépenses", sous: "Chaque versement compte le jour où il est reçu" });
 
     vue.innerHTML =
       '<div class="puces" id="puces-periode">' +
@@ -91,6 +92,13 @@ const VueStats = (() => {
           '<div class="tuile tuile-vert"><div class="tuile-label">' + UI.icone("argent", "ic-sm") + 'Recettes</div>' +
             '<div class="tuile-valeur">' + Utils.fmtMontant(stats.recettes, r.devise) + "</div>" +
             '<div class="tuile-note">' + stats.nbPaiements + " versement" + (stats.nbPaiements > 1 ? "s" : "") + "</div></div>" +
+          '<div class="tuile tuile-rouge"><div class="tuile-label">' + UI.icone("telecharger", "ic-sm") + 'Dépenses</div>' +
+            '<div class="tuile-valeur">' + Utils.fmtMontant(stats.totalDepenses, r.devise) + "</div>" +
+            '<div class="tuile-note">' + stats.depenses.length + " dépense" + (stats.depenses.length > 1 ? "s" : "") + "</div></div>" +
+          '<div class="tuile ' + (stats.benefice >= 0 ? "tuile-vert" : "tuile-rouge") + '"><div class="tuile-label">' +
+            UI.icone("stats", "ic-sm") + 'Bénéfice</div>' +
+            '<div class="tuile-valeur">' + Utils.fmtMontant(stats.benefice, r.devise) + "</div>" +
+            '<div class="tuile-note">recettes − dépenses</div></div>' +
           '<div class="tuile"><div class="tuile-label">' + UI.icone("commandes", "ic-sm") + 'Commandes créées</div>' +
             '<div class="tuile-valeur">' + stats.commandesCreees + "</div>" +
             '<div class="tuile-note">' + Utils.fmtMontant(stats.montantCommandes, r.devise) + " au total</div></div>" +
@@ -105,8 +113,30 @@ const VueStats = (() => {
       html +=
         '<div class="carte"><div class="carte-titre">' + UI.icone("stats", "ic-sm") + "Encaissements par " +
           (Utils.ecartJours(b.debut, b.fin) > 62 ? "mois" : "jour") + "</div>" +
-          graphique(b, stats, r) +
+          graphique(b, stats) +
         "</div>";
+
+      /* Dépenses de la période */
+      html +=
+        '<div class="section-titre">' + UI.icone("telecharger", "ic-sm") + "Dépenses (" + stats.depenses.length + ")" +
+          '<a class="lien" id="ajouter-depense" style="cursor:pointer">+ Dépense</a></div>';
+      if (stats.depenses.length) {
+        html += '<div class="carte"><div class="mini-liste">' +
+          stats.depenses.map((d) =>
+            '<div class="mini">' +
+              '<span class="l"><strong>' + e(d.libelle) + "</strong>" +
+                (d.note ? " · " + e(d.note) : "") +
+                '<br><span style="color:var(--encre-tres-douce);font-size:12px">' + Utils.fmtDate(d.dateDepense) + "</span></span>" +
+              '<span class="v" style="color:var(--rouge)">−' + Utils.fmtMontant(d.montant, r.devise) + "</span>" +
+              '<button type="button" class="btn-ic" style="width:30px;height:30px;background:var(--rouge-clair);color:var(--rouge)" data-suppr-depense="' + d.id + '" aria-label="Supprimer la dépense">' +
+                UI.icone("poubelle", "ic-sm") + "</button>" +
+            "</div>"
+          ).join("") +
+        "</div></div>";
+      } else {
+        html += '<div class="carte"><p style="margin:0;font-size:13px;color:var(--encre-tres-douce)">' +
+          "Aucune dépense sur la période. Enregistrez ici les achats de fournitures, loyer, salaires…</p></div>";
+      }
 
       /* Journal des versements */
       html += '<div class="section-titre">' + UI.icone("argent", "ic-sm") + "Journal des versements</div>";
@@ -133,6 +163,51 @@ const VueStats = (() => {
       }
 
       UI.$("#zone-stats").innerHTML = html;
+
+      /* Ajout d'une dépense */
+      UI.$("#ajouter-depense").onclick = () => {
+        const corps = UI.ouvrirFeuille("Nouvelle dépense",
+          '<div class="carte">' +
+            '<div class="champ"><label for="dep-libelle">Libellé <span class="obligatoire">*</span></label>' +
+              '<input id="dep-libelle" autocomplete="off" placeholder="Ex. : tissu doublure, fil, loyer…"></div>' +
+            UI.champMontant({ id: "dep-montant", label: "Montant", obligatoire: true }) +
+            '<div class="champ"><label for="dep-date">Date</label>' +
+              '<input id="dep-date" type="date" value="' + Utils.aujourdhui() + '"></div>' +
+            '<div class="champ"><label for="dep-note">Note (facultatif)</label>' +
+              '<input id="dep-note" autocomplete="off"></div>' +
+            '<button type="button" class="btn btn-bloc" id="dep-ok">' + UI.icone("check", "ic-sm") + "Enregistrer la dépense</button>" +
+          "</div>");
+        UI.$("#dep-libelle", corps).focus();
+        UI.$("#dep-ok", corps).onclick = async () => {
+          try {
+            await Store.ajouterDepense({
+              libelle: UI.$("#dep-libelle", corps).value,
+              montant: UI.$("#dep-montant", corps).value,
+              dateDepense: UI.$("#dep-date", corps).value,
+              note: UI.$("#dep-note", corps).value,
+            });
+            UI.fermerFeuille();
+            UI.toast("Dépense enregistrée", "ok");
+            rendre();
+          } catch (err) {
+            UI.toast(err.message || "Enregistrement impossible", "erreur");
+          }
+        };
+      };
+
+      /* Suppression d'une dépense */
+      for (const bouton of UI.$$("[data-suppr-depense]", vue)) {
+        bouton.onclick = async () => {
+          const ok = await UI.confirmer({
+            titre: "Supprimer la dépense",
+            texte: "Cette dépense sera retirée des statistiques.",
+            bouton: "Supprimer", danger: true,
+          });
+          if (!ok) return;
+          await Store.supprimerDepense(bouton.dataset.supprDepense);
+          rendre();
+        };
+      }
     }
 
     rendre();
@@ -140,11 +215,10 @@ const VueStats = (() => {
 
   /* ---------- Graphique en barres (SVG, sans dépendance) ---------- */
 
-  function graphique(b, stats, r) {
+  function graphique(b, stats) {
     const nbJours = Utils.ecartJours(b.debut, b.fin) + 1;
     const parMois = nbJours > 62;
 
-    /* Regroupe par jour ou par mois selon l'étendue. */
     const seaux = [];
     if (parMois) {
       const table = {};

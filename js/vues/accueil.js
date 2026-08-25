@@ -28,13 +28,13 @@ const VueAccueil = (() => {
 
     UI.entete({
       titre: r.nomAtelier,
-      sous: Utils.fmtJourDate(aujourdhui),
+      sous: r.slogan || Utils.fmtJourDate(aujourdhui),
       actions:
         '<a class="btn-ic" href="#/reglages" aria-label="Réglages">' + UI.icone("reglages") + "</a>",
     });
 
     let html =
-      Licence.bandeauHtml() +
+      Store.bandeauAbonnement() +
       '<section class="heros">' +
         '<div class="heros-label">Recettes de ' + e(Utils.MOIS[new Date().getMonth()]) + "</div>" +
         '<div class="heros-valeur">' + Utils.fmtMontant(stats.recettes, r.devise) + "</div>" +

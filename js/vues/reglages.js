@@ -1,154 +1,143 @@
 /* =========================================================
-   Vue Réglages — atelier, devise, modèles WhatsApp,
-   sauvegarde / restauration des données.
+   Vue Réglages (administrateur d'atelier) — informations de
+   l'atelier, personnalisation (logo, slogan, numéros, modèles
+   WhatsApp), export des données, déconnexion.
    ========================================================= */
 const VueReglages = (() => {
   const e = Utils.echapper;
 
   async function afficher(vue) {
     const r = Store.lireReglages();
-    const [nbClients, nbCommandes, nbPhotos, espace] = await Promise.all([
-      DB.compter("clients"), DB.compter("commandes"), DB.compter("photos"), DB.espace(),
-    ]);
+    const profil = Api.lireProfil();
+    let logoDataUrl = r.logo || "";
 
-    UI.entete({ titre: "Réglages", retour: true });
+    UI.entete({ titre: "Réglages", sous: r.nomAtelier, retour: true });
 
     vue.innerHTML =
-      '<form id="form-reglages" novalidate>' +
+      '<div class="carte">' +
+        '<div class="carte-titre">' + UI.icone("commandes", "ic-sm") + "Mon atelier</div>" +
+        '<div class="paires">' +
+          '<div class="paire"><span class="l">Nom</span><span class="v">' + e(r.nomAtelier) + "</span></div>" +
+          '<div class="paire"><span class="l">Devise</span><span class="v">' + e(r.devise) + "</span></div>" +
+          '<div class="paire"><span class="l">Indicatif pays</span><span class="v">' + e(r.indicatif) + "</span></div>" +
+          '<div class="paire"><span class="l">Abonnement</span><span class="v">' +
+            Utils.fmtMontant(r.abonnementMensuel, r.devise) + " / mois</span></div>" +
+          '<div class="paire"><span class="l">Actif jusqu\'au</span><span class="v vert">' +
+            (r.abonnementFin ? Utils.fmtDate(Utils.isoJour(new Date(r.abonnementFin))) : "—") + "</span></div>" +
+        "</div>" +
+        '<div class="aide" style="margin-top:8px">Ces informations sont gérées par votre fournisseur.</div>' +
+      "</div>" +
+
+      '<form id="form-perso">' +
         '<div class="carte">' +
-          '<div class="carte-titre">' + UI.icone("reglages", "ic-sm") + "Atelier</div>" +
-          '<div class="champ"><label for="reg-nom">Nom de l\'atelier</label>' +
-            '<input id="reg-nom" autocomplete="off" value="' + e(r.nomAtelier) + '">' +
-            '<div class="aide">Apparaît sur l\'accueil et dans les messages WhatsApp.</div></div>' +
+          '<div class="carte-titre">' + UI.icone("crayon", "ic-sm") + "Personnalisation</div>" +
+          '<div class="champ"><label>Logo de l\'atelier</label>' +
+            '<div style="display:flex;align-items:center;gap:12px">' +
+              '<img id="perso-logo-apercu" class="logo-apercu" alt=""' + (logoDataUrl ? ' src="' + logoDataUrl + '"' : " hidden") + ">" +
+              '<button type="button" class="btn btn-clair btn-sm" id="perso-logo-choisir">Choisir</button>' +
+              '<button type="button" class="btn btn-danger btn-sm" id="perso-logo-retirer"' + (logoDataUrl ? "" : " hidden") + ">Retirer</button>" +
+            "</div>" +
+            '<input type="file" id="perso-logo" accept="image/*" hidden></div>' +
+          '<div class="champ"><label for="perso-slogan">Slogan</label>' +
+            '<input id="perso-slogan" autocomplete="off" value="' + e(r.slogan) + '"></div>' +
           '<div class="champ-duo">' +
-            '<div class="champ"><label for="reg-devise">Devise</label>' +
-              '<input id="reg-devise" autocomplete="off" value="' + e(r.devise) + '"></div>' +
-            '<div class="champ"><label for="reg-indicatif">Indicatif pays</label>' +
-              '<input id="reg-indicatif" inputmode="numeric" autocomplete="off" value="' + e(r.indicatif) + '">' +
-              '<div class="aide">Ex. : 229 (Bénin), 228 (Togo), 225 (Côte d\'Ivoire).</div></div>' +
+            '<div class="champ"><label for="perso-wa">N° WhatsApp de l\'atelier</label>' +
+              '<input id="perso-wa" type="tel" inputmode="tel" autocomplete="off" value="' + e(r.telWhatsAppAtelier) + '"></div>' +
+            '<div class="champ"><label for="perso-appel">N° d\'appel de l\'atelier</label>' +
+              '<input id="perso-appel" type="tel" inputmode="tel" autocomplete="off" value="' + e(r.telAppelAtelier) + '"></div>' +
           "</div>" +
         "</div>" +
 
         '<div class="carte">' +
           '<div class="carte-titre">' + UI.icone("whatsapp", "ic-sm") + "Modèles de message WhatsApp</div>" +
-          '<div class="champ"><label for="reg-modele">Récapitulatif de commande</label>' +
-            '<textarea id="reg-modele" style="min-height:150px">' + e(r.modeleWhatsApp) + "</textarea></div>" +
-          '<div class="champ"><label for="reg-modele-pret">Commande prête</label>' +
-            '<textarea id="reg-modele-pret" style="min-height:110px">' + e(r.modeleWhatsAppPret) + "</textarea></div>" +
+          '<div class="champ"><label for="perso-modele">Récapitulatif de commande</label>' +
+            '<textarea id="perso-modele" style="min-height:150px">' + e(r.modeleWhatsApp) + "</textarea></div>" +
+          '<div class="champ"><label for="perso-modele-pret">Commande prête</label>' +
+            '<textarea id="perso-modele-pret" style="min-height:110px">' + e(r.modeleWhatsAppPret) + "</textarea></div>" +
           '<div class="aide">Mots remplacés automatiquement : {prenom} {nom} {numero} {atelier} {livraison} {montant} {acompte} {paye} {solde}</div>' +
         "</div>" +
 
-        '<button type="submit" class="btn btn-bloc">' + UI.icone("check", "ic-sm") + "Enregistrer les réglages</button>" +
+        '<button type="submit" class="btn btn-bloc">' + UI.icone("check", "ic-sm") + "Enregistrer</button>" +
       "</form>" +
 
       '<div class="carte" style="margin-top:14px">' +
-        '<div class="carte-titre">' + UI.icone("telecharger", "ic-sm") + "Sauvegarde</div>" +
+        '<div class="carte-titre">' + UI.icone("telecharger", "ic-sm") + "Copie des données</div>" +
         '<p style="margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--encre-douce)">' +
-          nbClients + " client" + (nbClients > 1 ? "s" : "") + ", " +
-          nbCommandes + " commande" + (nbCommandes > 1 ? "s" : "") + ", " +
-          nbPhotos + " photo" + (nbPhotos > 1 ? "s" : "") +
-          (espace && espace.utilise ? " — " + Utils.tailleLisible(espace.utilise) + " utilisés" : "") +
-          ". Les données restent sur ce téléphone : pensez à exporter une sauvegarde régulièrement " +
-          "(à garder sur WhatsApp, un e-mail ou une carte mémoire)." +
+          "Vos données sont hébergées en ligne et sauvegardées par le serveur. " +
+          "Vous pouvez tout de même télécharger une copie lisible (clients, commandes, dépenses)." +
         "</p>" +
-        '<div class="btn-rangee">' +
-          '<button type="button" class="btn btn-or" id="btn-exporter">' + UI.icone("telecharger", "ic-sm") + "Exporter</button>" +
-          '<button type="button" class="btn btn-contour" id="btn-importer">' + UI.icone("televerser", "ic-sm") + "Restaurer</button>" +
-        "</div>" +
-        '<input type="file" id="fichier-import" accept=".json,application/json" hidden>' +
+        '<button type="button" class="btn btn-or" id="btn-exporter">' + UI.icone("telecharger", "ic-sm") + "Télécharger une copie</button>" +
       "</div>" +
 
       '<div class="carte" style="margin-top:14px">' +
-        '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Licence</div>" +
-        '<p style="margin:0 0 12px;font-size:13.5px;line-height:1.5;color:var(--encre-douce)" id="licence-resume">' +
-          e(Licence.resume()) +
-        "</p>" +
-        '<div class="btn-rangee">' +
-          (Licence.CONFIG.cleKkiapayPublique
-            ? '<button type="button" class="btn btn-or" id="btn-payer-licence">Payer ' +
-              Utils.fmtNombre(Licence.CONFIG.prixMensuel) + " FCFA (1 mois)</button>"
-            : "") +
-          '<button type="button" class="btn btn-contour" id="btn-code-licence">Entrer un code</button>' +
+        '<div class="carte-titre">' + UI.icone("clients", "ic-sm") + "Compte</div>" +
+        '<div class="paires">' +
+          '<div class="paire"><span class="l">Connecté en tant que</span><span class="v">' +
+            e(profil ? (profil.nom_complet || profil.email) : "—") + "</span></div>" +
+          '<div class="paire"><span class="l">Email</span><span class="v">' + e(profil ? profil.email : "—") + "</span></div>" +
         "</div>" +
+        '<button type="button" class="btn btn-danger btn-bloc" id="btn-deconnexion" style="margin-top:12px">Se déconnecter</button>' +
       "</div>" +
 
-      '<p class="pied-note">Atelier — application hors ligne. Vos données ne quittent jamais ce téléphone.</p>';
+      '<p class="pied-note">Atelier — vos données sont accessibles partout, à tout moment.</p>';
 
-    UI.$("#form-reglages").addEventListener("submit", async (ev) => {
+    /* Logo */
+    const champLogo = UI.$("#perso-logo");
+    const apercu = UI.$("#perso-logo-apercu");
+    const retirer = UI.$("#perso-logo-retirer");
+    UI.$("#perso-logo-choisir").onclick = () => champLogo.click();
+    retirer.onclick = () => {
+      logoDataUrl = "";
+      apercu.hidden = true;
+      retirer.hidden = true;
+    };
+    champLogo.addEventListener("change", async () => {
+      const fichier = champLogo.files && champLogo.files[0];
+      champLogo.value = "";
+      if (!fichier) return;
+      try {
+        const { dataUrl } = await Utils.compresserImage(fichier, 400, 0.82);
+        logoDataUrl = dataUrl;
+        apercu.src = dataUrl;
+        apercu.hidden = false;
+        retirer.hidden = false;
+      } catch (_) {
+        UI.toast("Image illisible", "erreur");
+      }
+    });
+
+    UI.$("#form-perso").addEventListener("submit", async (ev) => {
       ev.preventDefault();
-      await Store.majReglages({
-        nomAtelier: UI.$("#reg-nom").value.trim() || "Mon atelier",
-        devise: UI.$("#reg-devise").value.trim() || "FCFA",
-        indicatif: UI.$("#reg-indicatif").value.replace(/\D/g, ""),
-        modeleWhatsApp: UI.$("#reg-modele").value,
-        modeleWhatsAppPret: UI.$("#reg-modele-pret").value,
-      });
-      UI.toast("Réglages enregistrés", "ok");
+      try {
+        await Store.majReglages({
+          logo: logoDataUrl,
+          slogan: UI.$("#perso-slogan").value.trim(),
+          telWhatsAppAtelier: UI.$("#perso-wa").value.trim(),
+          telAppelAtelier: UI.$("#perso-appel").value.trim(),
+          modeleWhatsApp: UI.$("#perso-modele").value,
+          modeleWhatsAppPret: UI.$("#perso-modele-pret").value,
+        });
+        UI.toast("Réglages enregistrés", "ok");
+      } catch (err) {
+        UI.toast(err.message || "Enregistrement impossible", "erreur");
+      }
     });
 
     UI.$("#btn-exporter").onclick = async () => {
       try {
         const donnees = await Store.exporter();
-        Utils.telecharger(
-          "atelier-sauvegarde-" + Utils.aujourdhui() + ".json",
-          JSON.stringify(donnees)
-        );
-        UI.toast("Sauvegarde exportée", "ok");
+        Utils.telecharger("atelier-copie-" + Utils.aujourdhui() + ".json", JSON.stringify(donnees));
+        UI.toast("Copie téléchargée", "ok");
       } catch (err) {
         UI.toast(err.message || "Export impossible", "erreur");
       }
     };
 
-    const boutonPayerLicence = UI.$("#btn-payer-licence");
-    if (boutonPayerLicence) boutonPayerLicence.onclick = async () => {
-      boutonPayerLicence.disabled = true;
-      try { await Licence.payer(); }
-      catch (err) { UI.toast(err.message || "Paiement indisponible", "erreur"); }
-      boutonPayerLicence.disabled = false;
+    UI.$("#btn-deconnexion").onclick = async () => {
+      await Api.deconnexion();
+      location.hash = "#/";
+      window.AppNaviguer();
     };
-
-    UI.$("#btn-code-licence").onclick = () => {
-      const corps = UI.ouvrirFeuille("Code de déblocage",
-        '<div class="carte">' +
-          '<div class="champ"><label for="code-licence">Code fourni par votre installateur</label>' +
-            '<input id="code-licence" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ATEL-XXXXX-XXXXX"></div>' +
-          '<button type="button" class="btn btn-bloc" id="code-licence-ok">Débloquer pour 1 mois</button>' +
-        "</div>");
-      UI.$("#code-licence", corps).focus();
-      UI.$("#code-licence-ok", corps).onclick = async () => {
-        const ok = await Licence.essayerCode(UI.$("#code-licence", corps).value);
-        if (ok) {
-          UI.fermerFeuille();
-          UI.toast("Application débloquée pour 1 mois. Merci !", "ok");
-          UI.$("#licence-resume").textContent = Licence.resume();
-        } else {
-          UI.toast("Code invalide — vérifiez et réessayez", "erreur");
-        }
-      };
-    };
-
-    const fichier = UI.$("#fichier-import");
-    UI.$("#btn-importer").onclick = () => fichier.click();
-    fichier.addEventListener("change", async () => {
-      const f = fichier.files && fichier.files[0];
-      fichier.value = "";
-      if (!f) return;
-      const ok = await UI.confirmer({
-        titre: "Restaurer une sauvegarde",
-        texte: "Les données actuelles (" + nbClients + " clients, " + nbCommandes +
-          " commandes) seront remplacées par celles du fichier. Continuer ?",
-        bouton: "Restaurer", danger: true,
-      });
-      if (!ok) return;
-      try {
-        const texte = await f.text();
-        const resultat = await Store.importer(JSON.parse(texte));
-        UI.toast("Restauré : " + resultat.clients + " clients, " + resultat.commandes + " commandes", "ok");
-        setTimeout(() => location.reload(), 900);
-      } catch (err) {
-        UI.toast(err.message || "Fichier de sauvegarde illisible", "erreur");
-      }
-    });
   }
 
   return { afficher };
