@@ -145,7 +145,9 @@ create or replace function public.proteger_profil()
 returns trigger language plpgsql security definer set search_path = public as
 $$
 begin
-  if public.role_courant() is distinct from 'superadmin' then
+  -- auth.uid() est nul hors application (éditeur SQL, service_role) :
+  -- ces contextes de confiance ne sont pas bridés.
+  if auth.uid() is not null and public.role_courant() is distinct from 'superadmin' then
     new.role := old.role;
     new.atelier_id := old.atelier_id;
   end if;
@@ -164,7 +166,7 @@ create or replace function public.proteger_atelier()
 returns trigger language plpgsql security definer set search_path = public as
 $$
 begin
-  if public.role_courant() is distinct from 'superadmin' then
+  if auth.uid() is not null and public.role_courant() is distinct from 'superadmin' then
     new.nom := old.nom;
     new.devise := old.devise;
     new.indicatif := old.indicatif;
