@@ -19,6 +19,7 @@ const Store = (() => {
     modeleWhatsApp:
       "Bonjour {prenom} 👋\n" +
       "Votre commande {numero} chez {atelier} :\n" +
+      "• Modèle : {description}\n" +
       "• Livraison prévue : {livraison}\n" +
       "• Montant : {montant}\n" +
       "• Acompte reçu : {acompte}\n" +
@@ -95,6 +96,7 @@ const Store = (() => {
 
   const commandeVersApp = (l) => l && {
     id: l.id, numero: l.numero, clientId: l.client_id, description: l.description || "",
+    commentaire: l.commentaire || "",
     statut: l.statut, dateLivraison: l.date_livraison, montant: Number(l.montant) || 0,
     paiements: l.paiements || [], livreLe: l.livre_le, creeLe: l.cree_le, modifieLe: l.modifie_le,
   };
@@ -173,6 +175,8 @@ const Store = (() => {
       const statut = donnees.statut || existante.statut;
       return commandeVersApp(await Api.mettreAJour("commandes", donnees.id, {
         description: (donnees.description || "").trim(),
+        commentaire: (donnees.commentaire !== undefined
+          ? donnees.commentaire : existante.commentaire).trim(),
         date_livraison: donnees.dateLivraison || existante.dateLivraison,
         montant,
         statut,
@@ -197,6 +201,7 @@ const Store = (() => {
       numero,
       client_id: donnees.clientId,
       description: (donnees.description || "").trim(),
+      commentaire: (donnees.commentaire || "").trim(),
       statut: "en_cours",
       date_livraison: donnees.dateLivraison || Utils.aujourdhui(),
       montant,
@@ -419,6 +424,164 @@ const Store = (() => {
 
   const imprimerFacture = (vente) => Utils.imprimerA4(vente.numero, factureA4(vente));
 
+  /** Point A4 des recettes et dépenses d'une période. */
+  function rapportA4(stats, bornes, libelle) {
+    const r = lireReglages();
+    const e = Utils.echapper;
+    const m = (v) => Utils.fmtMontant(v, r.devise);
+    const contacts = [r.telAppelAtelier, r.telWhatsAppAtelier].filter(Boolean).join(" · ");
+    const ligne = (date, libelleLigne, detail, montant, couleur) =>
+      "<tr><td class='date'>" + e(date) + "</td><td>" + e(libelleLigne) +
+      (detail ? " <span style='color:#8b8fa8'>" + e(detail) + "</span>" : "") +
+      "</td><td class='num' style='color:" + couleur + "'>" + m(montant) + "</td></tr>";
+
+    return (
+      "<!DOCTYPE html><html lang='fr'><head><meta charset='utf-8'>" +
+      "<title>Point " + e(libelle) + "</title><style>" +
+      "@page{size:A4;margin:15mm}" +
+      "*{box-sizing:border-box}" +
+      "body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;color:#141636;font-size:11pt;line-height:1.45}" +
+      ".entete{display:flex;align-items:flex-start;gap:12mm;border-bottom:2px solid #2E3192;padding-bottom:5mm}" +
+      ".logo{width:22mm;height:22mm;object-fit:cover;border-radius:3mm}" +
+      ".atelier{flex:1}.atelier h1{margin:0;font-size:18pt;color:#2E3192}" +
+      ".atelier p{margin:1mm 0;font-size:10pt;color:#5b5f7d}" +
+      ".titre{text-align:right}.titre h2{margin:0;font-size:14pt;letter-spacing:1px}" +
+      ".titre p{margin:1mm 0;font-size:10pt;color:#5b5f7d}" +
+      ".resume{display:flex;gap:4mm;margin:7mm 0}" +
+      ".case{flex:1;border:1px solid #e3e5f0;border-radius:2mm;padding:3.5mm}" +
+      ".case .l{font-size:9pt;text-transform:uppercase;letter-spacing:.8px;color:#5b5f7d}" +
+      ".case .v{font-size:15pt;font-weight:750;margin-top:1mm}" +
+      "h3{margin:7mm 0 2mm;font-size:11pt;color:#2E3192;text-transform:uppercase;letter-spacing:.8px}" +
+      "table{width:100%;border-collapse:collapse}" +
+      "th{text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#5b5f7d;" +
+        "border-bottom:1.5px solid #2E3192;padding:2mm}" +
+      "td{padding:2mm;border-bottom:1px solid #e9eaf3;font-size:10.5pt}" +
+      "td.date{white-space:nowrap;color:#5b5f7d;width:32mm}" +
+      "td.num,th.num{text-align:right;white-space:nowrap}" +
+      "tr.total td{border-top:1.5px solid #2E3192;border-bottom:0;font-weight:700;padding-top:2.5mm}" +
+      ".pied{margin-top:10mm;border-top:1px solid #e3e5f0;padding-top:3mm;font-size:9.5pt;" +
+        "color:#5b5f7d;display:flex;justify-content:space-between}" +
+      ".vide{color:#8b8fa8;font-size:10pt;margin:2mm 0}" +
+      "</style></head><body>" +
+
+      "<div class='entete'>" +
+        (r.logo ? "<img class='logo' src='" + r.logo + "' alt=''>" : "") +
+        "<div class='atelier'><h1>" + e(r.nomAtelier) + "</h1>" +
+          (r.slogan ? "<p>" + e(r.slogan) + "</p>" : "") +
+          (contacts ? "<p>" + e(contacts) + "</p>" : "") + "</div>" +
+        "<div class='titre'><h2>POINT DE CAISSE</h2>" +
+          "<p>" + e(libelle) + "</p>" +
+          "<p>Édité le " + e(Utils.fmtDate(Utils.aujourdhui())) + "</p></div>" +
+      "</div>" +
+
+      "<div class='resume'>" +
+        "<div class='case'><div class='l'>Recettes</div><div class='v' style='color:#0F9D58'>" +
+          m(stats.recettes) + "</div></div>" +
+        "<div class='case'><div class='l'>Dépenses</div><div class='v' style='color:#D33A2C'>" +
+          m(stats.totalDepenses) + "</div></div>" +
+        "<div class='case'><div class='l'>Bénéfice</div><div class='v' style='color:" +
+          (stats.benefice >= 0 ? "#0F9D58" : "#D33A2C") + "'>" + m(stats.benefice) + "</div></div>" +
+      "</div>" +
+
+      "<h3>Encaissements (" + stats.paiements.length + ")</h3>" +
+      (stats.paiements.length
+        ? "<table><thead><tr><th>Date</th><th>Origine</th><th class='num'>Montant</th></tr></thead><tbody>" +
+          stats.paiements.map((p) => ligne(
+            Utils.fmtDate(Utils.isoJour(new Date(p.date))),
+            p.vente ? (p.vente.client || "Client au comptoir") : (p.commande ? p.commande.numero : ""),
+            p.note || "", p.montant, "#0F9D58")).join("") +
+          "<tr class='total'><td></td><td>Total des recettes</td><td class='num'>" +
+            m(stats.recettes) + "</td></tr>" +
+          "</tbody></table>"
+        : "<p class='vide'>Aucun encaissement sur la période.</p>") +
+
+      "<h3>Dépenses (" + stats.depenses.length + ")</h3>" +
+      (stats.depenses.length
+        ? "<table><thead><tr><th>Date</th><th>Libellé</th><th class='num'>Montant</th></tr></thead><tbody>" +
+          stats.depenses.map((d) => ligne(
+            Utils.fmtDate(d.dateDepense), d.libelle, d.note || "", d.montant, "#D33A2C")).join("") +
+          "<tr class='total'><td></td><td>Total des dépenses</td><td class='num'>" +
+            m(stats.totalDepenses) + "</td></tr>" +
+          "</tbody></table>"
+        : "<p class='vide'>Aucune dépense sur la période.</p>") +
+
+      "<div class='pied'><span>" + e(r.nomAtelier) + " — point de caisse</span>" +
+        "<span>Bénéfice de la période : <b>" + m(stats.benefice) + "</b></span></div>" +
+      "</body></html>"
+    );
+  }
+
+  const imprimerRapport = (stats, bornes, libelle) =>
+    Utils.imprimerA4("Point de caisse", rapportA4(stats, bornes, libelle));
+
+  /** Journal A4 de tous les versements de la période, du plus récent au plus ancien. */
+  function journalA4(stats, libelle, nomParClient) {
+    const r = lireReglages();
+    const e = Utils.echapper;
+    const m = (v) => Utils.fmtMontant(v, r.devise);
+    const contacts = [r.telAppelAtelier, r.telWhatsAppAtelier].filter(Boolean).join(" · ");
+
+    return (
+      "<!DOCTYPE html><html lang='fr'><head><meta charset='utf-8'>" +
+      "<title>Journal des versements</title><style>" +
+      "@page{size:A4;margin:15mm}" +
+      "*{box-sizing:border-box}" +
+      "body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;color:#141636;font-size:11pt;line-height:1.45}" +
+      ".entete{display:flex;align-items:flex-start;gap:12mm;border-bottom:2px solid #2E3192;padding-bottom:5mm}" +
+      ".logo{width:22mm;height:22mm;object-fit:cover;border-radius:3mm}" +
+      ".atelier{flex:1}.atelier h1{margin:0;font-size:18pt;color:#2E3192}" +
+      ".atelier p{margin:1mm 0;font-size:10pt;color:#5b5f7d}" +
+      ".titre{text-align:right}.titre h2{margin:0;font-size:14pt;letter-spacing:1px}" +
+      ".titre p{margin:1mm 0;font-size:10pt;color:#5b5f7d}" +
+      "table{width:100%;border-collapse:collapse;margin-top:7mm}" +
+      "thead{display:table-header-group}" +   /* l'en-tête se répète à chaque page */
+      "th{text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#5b5f7d;" +
+        "border-bottom:1.5px solid #2E3192;padding:2mm}" +
+      "td{padding:2mm;border-bottom:1px solid #e9eaf3;font-size:10.5pt}" +
+      "tr{page-break-inside:avoid}" +
+      "td.date{white-space:nowrap;color:#5b5f7d;width:34mm}" +
+      "td.num,th.num{text-align:right;white-space:nowrap}" +
+      "tr.total td{border-top:1.5px solid #2E3192;border-bottom:0;font-weight:700;padding-top:2.5mm;font-size:12pt}" +
+      ".vide{color:#8b8fa8;font-size:10pt;margin:4mm 0}" +
+      ".pied{margin-top:8mm;border-top:1px solid #e3e5f0;padding-top:3mm;font-size:9.5pt;color:#5b5f7d}" +
+      "</style></head><body>" +
+
+      "<div class='entete'>" +
+        (r.logo ? "<img class='logo' src='" + r.logo + "' alt=''>" : "") +
+        "<div class='atelier'><h1>" + e(r.nomAtelier) + "</h1>" +
+          (r.slogan ? "<p>" + e(r.slogan) + "</p>" : "") +
+          (contacts ? "<p>" + e(contacts) + "</p>" : "") + "</div>" +
+        "<div class='titre'><h2>JOURNAL DES VERSEMENTS</h2>" +
+          "<p>" + e(libelle) + "</p>" +
+          "<p>Édité le " + e(Utils.fmtDate(Utils.aujourdhui())) + "</p></div>" +
+      "</div>" +
+
+      (stats.paiements.length
+        ? "<table><thead><tr><th>Date</th><th>Client</th><th>Référence</th>" +
+            "<th>Nature</th><th class='num'>Montant</th></tr></thead><tbody>" +
+          stats.paiements.map((p) => {
+            const client = p.vente
+              ? (p.vente.client || "Client au comptoir")
+              : ((nomParClient && nomParClient[p.commande.clientId]) || "");
+            const reference = p.vente ? p.vente.numero : p.commande.numero;
+            return "<tr><td class='date'>" + e(Utils.fmtDateHeure(p.date)) + "</td>" +
+              "<td>" + e(client) + "</td><td>" + e(reference) + "</td>" +
+              "<td>" + e(p.vente ? "Vente boutique" : (p.note || "Versement")) + "</td>" +
+              "<td class='num' style='color:#0F9D58'>" + m(p.montant) + "</td></tr>";
+          }).join("") +
+          "<tr class='total'><td colspan='4'>Total des versements (" + stats.paiements.length + ")</td>" +
+            "<td class='num'>" + m(stats.recettes) + "</td></tr>" +
+          "</tbody></table>"
+        : "<p class='vide'>Aucun versement sur la période.</p>") +
+
+      "<div class='pied'>" + e(r.nomAtelier) + " — journal des versements</div>" +
+      "</body></html>"
+    );
+  }
+
+  const imprimerJournal = (stats, libelle, nomParClient) =>
+    Utils.imprimerA4("Journal des versements", journalA4(stats, libelle, nomParClient));
+
   /** Annuler une facture remet les articles en stock. */
   async function supprimerVente(id) {
     const vente = await lireVente(id);
@@ -535,6 +698,8 @@ const Store = (() => {
       prenom: client && client.prenom ? client.prenom : Utils.nomComplet(client),
       nom: Utils.nomComplet(client),
       numero: commande.numero,
+      description: commande.description || "à préciser",
+      commentaire: commande.commentaire || "",
       atelier: r.nomAtelier,
       livraison: Utils.fmtDate(commande.dateLivraison),
       montant: Utils.fmtMontant(commande.montant, r.devise),
@@ -569,6 +734,7 @@ const Store = (() => {
     listerDepenses, ajouterDepense, supprimerDepense,
     listerVentes, lireVente, enregistrerVente, supprimerVente, articlesVendus,
     messageVente, lienWhatsAppVente, factureA4, imprimerFacture,
+    rapportA4, imprimerRapport, journalA4, imprimerJournal,
     paiementsSurPeriode, statsPeriode, messageCommande, exporter,
   };
 })();

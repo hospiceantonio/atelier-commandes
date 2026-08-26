@@ -20,6 +20,7 @@ create table if not exists public.ateliers (
   abonnement_fin       timestamptz not null default now() + interval '14 days',
   modele_whatsapp      text not null default 'Bonjour {prenom} 👋' || E'\n' ||
     'Votre commande {numero} chez {atelier} :' || E'\n' ||
+    '• Modèle : {description}' || E'\n' ||
     '• Livraison prévue : {livraison}' || E'\n' ||
     '• Montant : {montant}' || E'\n' ||
     '• Acompte reçu : {acompte}' || E'\n' ||
@@ -526,6 +527,19 @@ create or replace view public.ateliers_publics as
   where abonnement_fin > now();
 
 grant select on public.ateliers_publics to anon, authenticated;
+
+-- Commentaire libre saisi à la prise de commande (précisions du client,
+-- retouches convenues, particularités du tissu…).
+alter table public.commandes add column if not exists commentaire text not null default '';
+
+-- Les ateliers qui n'ont pas personnalisé leur modèle reçoivent la ligne
+-- « Modèle » ; ceux qui l'ont modifié ne sont pas touchés.
+update public.ateliers
+   set modele_whatsapp = replace(modele_whatsapp,
+         '• Livraison prévue :',
+         '• Modèle : {description}' || E'\n' || '• Livraison prévue :')
+ where modele_whatsapp like '%• Livraison prévue :%'
+   and modele_whatsapp not like '%{description}%';
 
 -- =========================================================
 -- Tableau de bord du superadministrateur

@@ -44,7 +44,7 @@ const VueClients = (() => {
           '<button type="button" class="ligne" data-nav="#/client/' + c.id + '">' +
             UI.pastilleClient(c) +
             '<span class="ligne-corps">' +
-              '<span class="ligne-titre">' + e(Utils.nomComplet(c)) + "</span>" +
+              '<span class="ligne-titre entier">' + e(Utils.nomComplet(c)) + "</span>" +
               '<span class="ligne-sous">' +
                 (Utils.telAppel(c)
                   ? "<span>" + UI.icone("tel", "ic-sm") + " " + e(Utils.fmtTel(Utils.telAppel(c))) + "</span>"

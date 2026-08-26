@@ -58,7 +58,8 @@ const VueReglages = (() => {
             '<textarea id="perso-modele" style="min-height:150px">' + e(r.modeleWhatsApp) + "</textarea></div>" +
           '<div class="champ"><label for="perso-modele-pret">Commande prête</label>' +
             '<textarea id="perso-modele-pret" style="min-height:110px">' + e(r.modeleWhatsAppPret) + "</textarea></div>" +
-          '<div class="aide">Mots remplacés automatiquement : {prenom} {nom} {numero} {atelier} {livraison} {montant} {acompte} {paye} {solde}</div>' +
+          '<div class="aide">Mots remplacés automatiquement : {prenom} {nom} {numero} {description} ' +
+            "{commentaire} {atelier} {livraison} {montant} {acompte} {paye} {solde}</div>" +
         "</div>" +
 
         '<button type="submit" class="btn btn-bloc">' + UI.icone("check", "ic-sm") + "Enregistrer</button>" +

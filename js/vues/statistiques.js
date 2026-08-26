@@ -35,6 +35,32 @@ const VueStats = (() => {
     return "Du " + Utils.fmtDate(b.debut) + " au " + Utils.fmtDate(b.fin);
   }
 
+  /** Propose l'impression directe ou l'export PDF, puis lance le document. */
+  function choisirImpression(titre, lancer) {
+    const corps = UI.ouvrirFeuille(titre,
+      '<button type="button" class="ligne" data-sortie="imprimer">' +
+        '<span class="pastille">' + UI.icone("telecharger", "ic-sm") + "</span>" +
+        '<span class="ligne-corps"><span class="ligne-titre">Imprimer directement</span>' +
+          '<span class="ligne-sous">Vers une imprimante connectée</span></span>' +
+      "</button>" +
+      '<button type="button" class="ligne" style="margin-top:10px" data-sortie="pdf">' +
+        '<span class="pastille">' + UI.icone("commandes", "ic-sm") + "</span>" +
+        '<span class="ligne-corps"><span class="ligne-titre">Exporter en PDF</span>' +
+          '<span class="ligne-sous">Pour l\'envoyer ou l\'archiver</span></span>' +
+      "</button>");
+
+    corps.addEventListener("click", (ev) => {
+      const choix = ev.target.closest("[data-sortie]");
+      if (!choix) return;
+      UI.feuilleSansRappel();
+      UI.fermerFeuille();
+      lancer();
+      if (choix.dataset.sortie === "pdf") {
+        UI.toast("Choisissez « Enregistrer au format PDF » comme destination", "ok");
+      }
+    });
+  }
+
   async function afficher(vue) {
     UI.entete({ titre: "Recettes & Dépenses", sous: "Chaque versement compte le jour où il est reçu" });
 
@@ -86,7 +112,12 @@ const VueStats = (() => {
       const parId = new Map(clients.map((c) => [c.id, c]));
 
       let html =
-        '<p style="margin:2px 0 0;font-size:12.5px;color:var(--encre-tres-douce)">' + e(libellePeriode(periodeActive, b)) + "</p>" +
+        '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 0">' +
+          '<p style="margin:0;flex:1;font-size:12.5px;color:var(--encre-tres-douce)">' +
+            e(libellePeriode(periodeActive, b)) + "</p>" +
+          '<button type="button" class="btn btn-clair btn-sm" id="btn-point">' +
+            UI.icone("telecharger", "ic-sm") + "Point A4</button>" +
+        "</div>" +
 
         '<div class="tuiles">' +
           '<div class="tuile tuile-vert"><div class="tuile-label">' + UI.icone("argent", "ic-sm") + 'Recettes</div>' +
@@ -143,7 +174,10 @@ const VueStats = (() => {
       }
 
       /* Journal des versements */
-      html += '<div class="section-titre">' + UI.icone("argent", "ic-sm") + "Journal des versements</div>";
+      html += '<div class="section-titre">' + UI.icone("argent", "ic-sm") + "Journal des versements" +
+        (stats.paiements.length
+          ? '<a class="lien" id="btn-journal" style="cursor:pointer">Imprimer A4</a>'
+          : "") + "</div>";
       if (stats.paiements.length) {
         html += '<div class="carte"><div class="mini-liste">' +
           stats.paiements.slice(0, 60).map((p) => {
@@ -162,7 +196,8 @@ const VueStats = (() => {
           }).join("") +
           (stats.paiements.length > 60
             ? '<p style="margin:6px 0 0;font-size:12px;color:var(--encre-tres-douce);text-align:center">' +
-              (stats.paiements.length - 60) + " versements plus anciens non affichés</p>"
+              (stats.paiements.length - 60) + " versements plus anciens non affichés — " +
+              "la version A4 les contient tous.</p>"
             : "") +
         "</div></div>";
       } else {
@@ -173,6 +208,21 @@ const VueStats = (() => {
       UI.$("#zone-stats").innerHTML = html;
 
       /* Ajout d'une dépense */
+      UI.$("#btn-point").onclick = () => {
+        choisirImpression("Point de caisse — " + libellePeriode(periodeActive, b),
+          () => Store.imprimerRapport(stats, b, libellePeriode(periodeActive, b)));
+      };
+
+      const boutonJournal = UI.$("#btn-journal");
+      if (boutonJournal) {
+        boutonJournal.onclick = () => {
+          const nomParClient = {};
+          for (const [id, c] of parId) nomParClient[id] = Utils.nomComplet(c);
+          choisirImpression("Journal des versements — " + libellePeriode(periodeActive, b),
+            () => Store.imprimerJournal(stats, libellePeriode(periodeActive, b), nomParClient));
+        };
+      }
+
       UI.$("#ajouter-depense").onclick = () => {
         const corps = UI.ouvrirFeuille("Nouvelle dépense",
           '<div class="carte">' +

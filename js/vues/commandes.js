@@ -129,6 +129,10 @@ const VueCommandes = (() => {
           '<div class="champ"><label for="cmd-livraison">Date de livraison <span class="obligatoire">*</span></label>' +
             '<input id="cmd-livraison" type="date" min="' + Utils.aujourdhui() + '" value="' + Utils.ajouterJours(Utils.aujourdhui(), 7) + '">' +
             '<div class="aide" id="aide-livraison"></div></div>' +
+          '<div class="champ"><label for="cmd-commentaire">Commentaire</label>' +
+            '<textarea id="cmd-commentaire" style="min-height:80px" ' +
+              'placeholder="Précisions du client, retouches convenues, particularité du tissu…"></textarea>' +
+            '<div class="aide">Noté sur la commande, pour vous et votre équipe.</div></div>' +
         "</div>" +
 
         '<div class="carte">' +
@@ -336,6 +340,7 @@ const VueCommandes = (() => {
         const commande = await Store.sauverCommande({
           clientId: clientChoisi.id,
           description: UI.$("#cmd-desc").value,
+          commentaire: UI.$("#cmd-commentaire").value,
           dateLivraison: livraison,
           montant, acompte,
         });
@@ -423,6 +428,16 @@ const VueCommandes = (() => {
         "</div>" +
         '<input type="file" id="prise-photo-detail" accept="image/*" capture="environment" multiple hidden>' +
       "</div>";
+
+    /* Commentaire de la commande */
+    if (commande.commentaire) {
+      html +=
+        '<div class="carte">' +
+          '<div class="carte-titre">' + UI.icone("crayon", "ic-sm") + "Commentaire</div>" +
+          '<p style="margin:0;font-size:14px;line-height:1.55;white-space:pre-wrap">' +
+            e(commande.commentaire) + "</p>" +
+        "</div>";
+    }
 
     /* Livraison */
     const enRetard = Store.estEnRetard(commande);
@@ -643,6 +658,8 @@ const VueCommandes = (() => {
             '<input id="mod-desc" autocomplete="off" value="' + e(commande.description) + '"></div>' +
           '<div class="champ"><label for="mod-livraison">Date de livraison</label>' +
             '<input id="mod-livraison" type="date" value="' + e(commande.dateLivraison) + '"></div>' +
+          '<div class="champ"><label for="mod-commentaire">Commentaire</label>' +
+            '<textarea id="mod-commentaire" style="min-height:80px">' + e(commande.commentaire) + "</textarea></div>" +
           UI.champMontant({ id: "mod-montant", label: "Montant de la commande", valeur: commande.montant, obligatoire: true,
             aide: "Déjà payé : " + Utils.fmtMontant(Store.totalPaye(commande), r.devise) + "." }) +
           '<button type="submit" class="btn btn-bloc" style="margin-top:4px">' + UI.icone("check", "ic-sm") + "Enregistrer</button>" +
@@ -664,6 +681,7 @@ const VueCommandes = (() => {
         await Store.sauverCommande({
           id, clientId: commande.clientId,
           description: UI.$("#mod-desc").value,
+          commentaire: UI.$("#mod-commentaire").value,
           dateLivraison: UI.$("#mod-livraison").value || commande.dateLivraison,
           montant, statut: commande.statut,
         });

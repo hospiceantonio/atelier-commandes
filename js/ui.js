@@ -127,7 +127,10 @@ const UI = (() => {
       '<button type="button" class="ligne" data-nav="#/commande/' + commande.id + '">' +
         pastilleClient(client) +
         '<span class="ligne-corps">' +
-          '<span class="ligne-titre">' + e(o.titre || Utils.nomComplet(client)) + "</span>" +
+          // Sans titre imposé, c'est le nom du client : il s'affiche en entier.
+          // Un titre fourni (nom — description) reste tronqué s'il déborde.
+          '<span class="ligne-titre' + (o.titre ? "" : " entier") + '">' +
+            e(o.titre || Utils.nomComplet(client)) + "</span>" +
           '<span class="ligne-sous">' +
             "<span>" + e(commande.numero) + "</span>" +
             "<span>·</span>" +
