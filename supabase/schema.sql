@@ -528,6 +528,47 @@ create or replace view public.ateliers_publics as
 grant select on public.ateliers_publics to anon, authenticated;
 
 -- =========================================================
+-- Tableau de bord du superadministrateur
+-- =========================================================
+
+-- Renvoie des compteurs, jamais des données d'atelier : le
+-- superadministrateur voit l'activité de la plateforme sans accéder aux
+-- clients, aux mesures ni aux commandes de ses ateliers abonnés.
+create or replace function public.statistiques_plateforme()
+returns jsonb language plpgsql stable security definer set search_path = public as
+$$
+begin
+  if public.role_courant() is distinct from 'superadmin' then
+    raise exception 'Réservé au superadministrateur';
+  end if;
+  return jsonb_build_object(
+    'ateliers',             (select count(*) from public.ateliers),
+    'ateliers_actifs',      (select count(*) from public.ateliers where abonnement_fin > now()),
+    'ateliers_mois',        (select count(*) from public.ateliers where cree_le >= date_trunc('month', now())),
+    'administrateurs',      (select count(*) from public.profils where role = 'admin' and atelier_id is not null),
+    'moderateurs',          (select count(*) from public.profils where role = 'moderateur'),
+    'encaisse_total',       (select coalesce(sum(montant), 0) from public.paiements_abonnement),
+    'encaisse_mois',        (select coalesce(sum(montant), 0) from public.paiements_abonnement
+                             where cree_le >= date_trunc('month', now())),
+    'renouvellements',      (select count(*) from public.paiements_abonnement),
+    'realisations',         (select count(*) from public.produits),
+    'realisations_en_avant',(select count(*) from public.produits where en_avant),
+    'clients',              (select count(*) from public.clients),
+    'commandes',            (select count(*) from public.commandes),
+    'commandes_livrees',    (select count(*) from public.commandes where statut = 'livree'),
+    'commandes_mois',       (select count(*) from public.commandes where cree_le >= date_trunc('month', now())),
+    'factures',             (select count(*) from public.ventes),
+    'factures_montant',     (select coalesce(sum(total), 0) from public.ventes),
+    'factures_mois',        (select count(*) from public.ventes where cree_le >= date_trunc('month', now())),
+    'bannieres',            (select count(*) from public.bannieres where active)
+  );
+end
+$$;
+
+revoke all on function public.statistiques_plateforme() from public, anon;
+grant execute on function public.statistiques_plateforme() to authenticated;
+
+-- =========================================================
 -- Bannières du carrousel d'accueil (superadministrateur)
 -- =========================================================
 

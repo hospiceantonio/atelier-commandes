@@ -102,7 +102,7 @@ const VueSuperAdmin = (() => {
       sous: ateliers.length + " atelier" + (ateliers.length > 1 ? "s" : "") + " client" + (ateliers.length > 1 ? "s" : ""),
       actions:
         '<a class="btn-ic" href="#/atelier-nouveau" aria-label="Nouvel atelier">' + UI.icone("plus") + "</a>" +
-        '<a class="btn-ic" href="#/reglages" aria-label="Compte">' + UI.icone("reglages") + "</a>",
+        '<a class="btn-ic" href="#/reglages" aria-label="Tableau de bord">' + UI.icone("stats") + "</a>",
     });
 
     if (!ateliers.length) {
@@ -668,12 +668,58 @@ const VueSuperAdmin = (() => {
 
   /* ---------- Compte superadmin ---------- */
 
+  /** Tuiles du tableau de bord, à partir des compteurs du serveur. */
+  function tuilesTableauBord(s, devise) {
+    const tuile = (classe, icone, label, valeur, note) =>
+      '<div class="tuile' + (classe ? " " + classe : "") + '">' +
+        '<div class="tuile-label">' + UI.icone(icone, "ic-sm") + e(label) + "</div>" +
+        '<div class="tuile-valeur">' + valeur + "</div>" +
+        '<div class="tuile-note">' + note + "</div></div>";
+
+    return (
+      '<div class="tuiles">' +
+        tuile("", "clients", "Ateliers", s.ateliers,
+          s.ateliers_actifs + " actif" + (s.ateliers_actifs > 1 ? "s" : "") +
+          (s.ateliers_mois ? " · " + s.ateliers_mois + " ce mois" : "")) +
+        tuile("tuile-vert", "argent", "Encaissé ce mois", Utils.fmtMontant(s.encaisse_mois, devise),
+          s.renouvellements + " renouvellement" + (s.renouvellements > 1 ? "s" : "") + " au total") +
+        tuile("tuile-vert", "stats", "Total encaissé", Utils.fmtMontant(s.encaisse_total, devise),
+          "depuis le début") +
+        tuile("", "boutique", "Réalisations", s.realisations,
+          s.realisations_en_avant + " à la une") +
+        tuile("", "check", "Commandes livrées", s.commandes_livrees,
+          "sur " + s.commandes + " commande" + (s.commandes > 1 ? "s" : "")) +
+        tuile("", "argent", "Factures éditées", s.factures,
+          Utils.fmtMontant(s.factures_montant, devise) + " de ventes en boutique") +
+        tuile("", "clients", "Clients suivis", s.clients,
+          "par l'ensemble des ateliers") +
+        tuile("", "connexion", "Comptes", s.administrateurs + s.moderateurs,
+          s.administrateurs + " admin · " + s.moderateurs + " modérateur" + (s.moderateurs > 1 ? "s" : "")) +
+      "</div>"
+    );
+  }
+
   async function compte(vue) {
     const profil = Api.lireProfil();
     const prm = Api.lireParametres();
-    UI.entete({ titre: "Mon compte", sous: "Superadministrateur", retour: true });
+    const ateliers = await Api.lister("ateliers");
+    const devise = (ateliers[0] && ateliers[0].devise) || "FCFA";
+    let stats = null;
+    try {
+      stats = await Api.rpc("statistiques_plateforme");
+    } catch (_) { /* base pas encore à jour : le tableau de bord attend */ }
+
+    UI.entete({ titre: "Tableau de bord", sous: "Superadministrateur", retour: true });
     vue.innerHTML =
+      (stats
+        ? tuilesTableauBord(stats, devise)
+        : '<div class="carte"><div class="carte-titre">Tableau de bord</div>' +
+            '<p style="margin:0;font-size:13px;line-height:1.5;color:var(--encre-douce)">' +
+            "Mettez la base à jour (exécutez <code>supabase/schema.sql</code> dans l'éditeur SQL " +
+            "de Supabase) puis rechargez : les chiffres de la plateforme s'afficheront ici.</p></div>") +
+
       '<div class="carte">' +
+        '<div class="carte-titre">' + UI.icone("clients", "ic-sm") + "Mon compte</div>" +
         '<div class="paires">' +
           '<div class="paire"><span class="l">Nom</span><span class="v">' + e(profil.nom_complet || "—") + "</span></div>" +
           '<div class="paire"><span class="l">Email</span><span class="v">' + e(profil.email) + "</span></div>" +
