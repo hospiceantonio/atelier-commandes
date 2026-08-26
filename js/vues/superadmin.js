@@ -420,8 +420,15 @@ const VueSuperAdmin = (() => {
   /* ---------- Historique des renouvellements ---------- */
 
   const estMobileMoney = (p) => String(p.reference || "").startsWith("kkiapay:");
+  const estCode = (p) => String(p.reference || "").startsWith("code:");
+  /* Même libellé à l'écran et sur le document A4. */
+  const modeRenouvellement = (p) =>
+    estMobileMoney(p) ? "Mobile Money / carte"
+      : estCode(p) ? "Par code"
+      : "Encaissé par vous";
 
   async function paiements(vue) {
+    const profil = Api.lireProfil();
     const [liste, ateliers] = await Promise.all([
       Api.lister("paiements_abonnement", "cree_le", false),
       Api.lister("ateliers"),
@@ -442,6 +449,10 @@ const VueSuperAdmin = (() => {
       titre: "Renouvellements",
       sous: liste.length + " paiement" + (liste.length > 1 ? "s" : "") + " enregistré" + (liste.length > 1 ? "s" : ""),
       retour: true,
+      actions: liste.length
+        ? '<button type="button" class="btn-ic" id="rn-imprimer" aria-label="Imprimer les renouvellements">' +
+            UI.icone("telecharger") + "</button>"
+        : "",
     });
 
     if (!liste.length) {
@@ -491,7 +502,7 @@ const VueSuperAdmin = (() => {
                 '<span class="l"><strong>' + e(atelier ? atelier.nom : "Atelier supprimé") + "</strong>" +
                   '<br><span style="color:var(--encre-tres-douce);font-size:12px">' +
                     Utils.fmtDateHeure(p.cree_le) + " · " +
-                    (estMobileMoney(p) ? "Mobile Money / carte" : "Encaissé par vous") +
+                    modeRenouvellement(p) +
                     (p.mois > 1 ? " · " + p.mois + " mois" : "") +
                   "</span></span>" +
                 '<span class="v" style="color:var(--vert)">+' +
@@ -504,6 +515,154 @@ const VueSuperAdmin = (() => {
       }).join("") +
       '<p class="pied-note">Les paiements Mobile Money sont inscrits par le serveur ; ' +
         "les renouvellements « + 1 mois » sont ceux que vous encaissez vous-même.</p>";
+
+    const boutonImprimer = UI.$("#rn-imprimer");
+    if (boutonImprimer) {
+      boutonImprimer.onclick = () => {
+        UI.choisirImpression("Renouvellements — " + Utils.fmtDate(Utils.aujourdhui()),
+          () => Utils.imprimerA4("Renouvellements Atelier",
+            renouvellementsA4(liste, ateliers, devise, profil)));
+      };
+    }
+  }
+
+  /** Journal des renouvellements au format A4 : totaux, détail par mois,
+      puis récapitulatif par atelier. */
+  function renouvellementsA4(liste, ateliers, devise, profil) {
+    const m = (v) => Utils.fmtMontant(v, devise);
+    const parId = {};
+    for (const a of ateliers) parId[a.id] = a;
+    const nom = (p) => (parId[p.atelier_id] ? parId[p.atelier_id].nom : "Atelier supprimé");
+    const montant = (p) => Number(p.montant) || 0;
+    const somme = (t) => t.reduce((s, p) => s + montant(p), 0);
+
+    const total = somme(liste);
+    const debutMois = new Date();
+    debutMois.setDate(1);
+    debutMois.setHours(0, 0, 0, 0);
+    const ceMois = liste.filter((p) => new Date(p.cree_le) >= debutMois);
+    const enLigne = liste.filter(estMobileMoney);
+    const codes = liste.filter(estCode);
+
+    /* Du plus récent au plus ancien, comme à l'écran. */
+    const parMois = {};
+    for (const p of liste) {
+      const d = new Date(p.cree_le);
+      const cle = d.getFullYear() + "-" + Utils.pad(d.getMonth() + 1);
+      (parMois[cle] = parMois[cle] || []).push(p);
+    }
+    const mois = Object.keys(parMois).sort().reverse();
+
+    /* Un atelier par ligne, le plus gros contributeur en tête. */
+    const parAtelier = {};
+    for (const p of liste) {
+      const cle = p.atelier_id || "?";
+      const f = (parAtelier[cle] = parAtelier[cle] || { nom: nom(p), nb: 0, total: 0, dernier: 0 });
+      f.nb += 1;
+      f.total += montant(p);
+      f.dernier = Math.max(f.dernier, new Date(p.cree_le).getTime());
+    }
+    const ateliersTries = Object.values(parAtelier).sort((x, y) => y.total - x.total);
+
+    const bloc = (l, v, n, couleur) =>
+      "<div class='case'><div class='l'>" + e(l) + "</div>" +
+      "<div class='v'" + (couleur ? " style='color:" + couleur + "'" : "") + ">" + v + "</div>" +
+      "<div class='n'>" + e(n) + "</div></div>";
+
+    return (
+      "<!DOCTYPE html><html lang='fr'><head><meta charset='utf-8'>" +
+      "<title>Renouvellements Atelier</title><style>" +
+      "@page{size:A4;margin:15mm}" +
+      "*{box-sizing:border-box}" +
+      "body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;color:#141636;font-size:11pt;line-height:1.45}" +
+      ".entete{display:flex;align-items:flex-end;border-bottom:2px solid #2E3192;padding-bottom:5mm}" +
+      ".marque{flex:1}.marque h1{margin:0;font-size:20pt;color:#2E3192;letter-spacing:-.5px}" +
+      ".marque p{margin:1mm 0 0;font-size:10pt;color:#5b5f7d}" +
+      ".titre{text-align:right}.titre h2{margin:0;font-size:13pt;letter-spacing:1px}" +
+      ".titre p{margin:1mm 0 0;font-size:10pt;color:#5b5f7d}" +
+      ".resume{display:flex;gap:3.5mm;margin:6mm 0 0}" +
+      ".case{flex:1;border:1px solid #e3e5f0;border-radius:2mm;padding:3.5mm}" +
+      ".case .l{font-size:9pt;text-transform:uppercase;letter-spacing:.8px;color:#5b5f7d}" +
+      ".case .v{font-size:15pt;font-weight:750;margin-top:1mm}" +
+      ".case .n{font-size:8.5pt;color:#8b8fa8;margin-top:.5mm}" +
+      /* Un titre ne doit jamais rester seul en bas de page. */
+      "h3{margin:8mm 0 2mm;font-size:11pt;color:#2E3192;text-transform:uppercase;letter-spacing:.8px;" +
+        "page-break-after:avoid;break-after:avoid}" +
+      "h4{margin:5mm 0 1.5mm;font-size:10pt;color:#141636;display:flex;justify-content:space-between;" +
+        "border-bottom:1px solid #e3e5f0;padding-bottom:1mm;page-break-after:avoid;break-after:avoid}" +
+      "h4 span{color:#0F9D58;font-weight:750}" +
+      "table{width:100%;border-collapse:collapse}" +
+      "thead{display:table-header-group}" +
+      "th{text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#5b5f7d;" +
+        "border-bottom:1.5px solid #2E3192;padding:2mm}" +
+      "td{padding:2mm;border-bottom:1px solid #e9eaf3;font-size:10.5pt}" +
+      "tr{page-break-inside:avoid}" +
+      "td.num,th.num{text-align:right;white-space:nowrap}" +
+      "td.date{white-space:nowrap;color:#5b5f7d}" +
+      "td.mode{font-size:9.5pt;color:#5b5f7d}" +
+      "tfoot td{font-weight:750;border-top:1.5px solid #2E3192;border-bottom:0}" +
+      ".bloc-mois{page-break-inside:avoid}" +
+      ".pied{margin-top:8mm;border-top:1px solid #e3e5f0;padding-top:3mm;font-size:9.5pt;" +
+        "color:#5b5f7d;display:flex;justify-content:space-between}" +
+      "</style></head><body>" +
+
+      "<div class='entete'>" +
+        "<div class='marque'><h1>Atelier</h1>" +
+          "<p>Plateforme de gestion pour ateliers de couture</p></div>" +
+        "<div class='titre'><h2>RENOUVELLEMENTS</h2>" +
+          "<p>Édité le " + e(Utils.fmtDate(Utils.aujourdhui())) + "</p>" +
+          "<p>" + e(profil ? (profil.nom_complet || profil.email) : "") + "</p></div>" +
+      "</div>" +
+
+      "<div class='resume'>" +
+        bloc("Ce mois-ci", m(somme(ceMois)),
+          ceMois.length + " renouvellement" + (ceMois.length > 1 ? "s" : ""), "#0F9D58") +
+        bloc("Total encaissé", m(total),
+          liste.length + " paiement" + (liste.length > 1 ? "s" : "") + " depuis le début", "#0F9D58") +
+        bloc("Mobile Money", enLigne.length,
+          m(somme(enLigne)) + " en ligne", "") +
+        bloc("Ateliers payants", ateliersTries.length,
+          "ont renouvelé au moins une fois", "") +
+      "</div>" +
+
+      mois.map((cle) => {
+        const [annee, numero] = cle.split("-");
+        const lignes = parMois[cle];
+        return (
+          "<div class='bloc-mois'>" +
+          "<h4>" + e(Utils.MOIS[Number(numero) - 1] + " " + annee) +
+            "<span>" + m(somme(lignes)) + "</span></h4>" +
+          "<table><thead><tr><th>Date</th><th>Atelier</th><th>Mode</th>" +
+            "<th class='num'>Durée</th><th class='num'>Montant</th></tr></thead><tbody>" +
+          lignes.map((p) =>
+            "<tr><td class='date'>" + e(Utils.fmtDateHeure(p.cree_le)) + "</td>" +
+              "<td>" + e(nom(p)) + "</td>" +
+              "<td class='mode'>" + e(modeRenouvellement(p)) + "</td>" +
+              "<td class='num'>" + (Number(p.mois) || 1) + " mois</td>" +
+              "<td class='num'>" + m(montant(p)) + "</td></tr>"
+          ).join("") +
+          "</tbody><tfoot><tr><td colspan='4'>Total du mois</td>" +
+            "<td class='num'>" + m(somme(lignes)) + "</td></tr></tfoot></table></div>"
+        );
+      }).join("") +
+
+      "<h3>Récapitulatif par atelier (" + ateliersTries.length + ")</h3>" +
+      "<table><thead><tr><th>Atelier</th><th class='num'>Renouvellements</th>" +
+        "<th class='num'>Dernier</th><th class='num'>Total versé</th></tr></thead><tbody>" +
+      ateliersTries.map((f) =>
+        "<tr><td>" + e(f.nom) + "</td>" +
+          "<td class='num'>" + f.nb + "</td>" +
+          "<td class='num'>" + e(Utils.fmtDate(Utils.isoJour(new Date(f.dernier)))) + "</td>" +
+          "<td class='num'>" + m(f.total) + "</td></tr>"
+      ).join("") +
+      "</tbody><tfoot><tr><td colspan='3'>Total général</td>" +
+        "<td class='num'>" + m(total) + "</td></tr></tfoot></table>" +
+
+      "<div class='pied'><span>Atelier — journal des renouvellements d'abonnement</span>" +
+        "<span>" + enLigne.length + " Mobile Money · " + codes.length + " par code · " +
+        (liste.length - enLigne.length - codes.length) + " encaissés directement</span></div>" +
+      "</body></html>"
+    );
   }
 
   /** Tableau de bord au format A4 : indicateurs puis état des ateliers. */
@@ -1078,5 +1237,5 @@ const VueSuperAdmin = (() => {
   }
 
   return { liste, formulaire, fiche, compte, paiements, codes, bannieres, formulaireBanniere,
-           tableauBordA4 };
+           tableauBordA4, renouvellementsA4 };
 })();
