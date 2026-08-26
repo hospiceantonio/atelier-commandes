@@ -7,80 +7,18 @@
 const VueStats = (() => {
   const e = Utils.echapper;
 
-  const PERIODES = [
-    { id: "jour", label: "Aujourd'hui" },
-    { id: "semaine", label: "7 jours" },
-    { id: "mois", label: "Ce mois" },
-    { id: "annee", label: "Cette année" },
-    { id: "libre", label: "Choisir…" },
-  ];
-
-  let periodeActive = "mois";
-  let libre = { debut: null, fin: null };
-
-  function bornes(id) {
-    const auj = Utils.aujourdhui();
-    if (id === "jour") return { debut: auj, fin: auj };
-    if (id === "semaine") return { debut: Utils.ajouterJours(auj, -6), fin: auj };
-    if (id === "mois") return { debut: auj.slice(0, 8) + "01", fin: auj };
-    if (id === "annee") return { debut: auj.slice(0, 5) + "01-01", fin: auj };
-    return {
-      debut: libre.debut || auj.slice(0, 8) + "01",
-      fin: libre.fin || auj,
-    };
-  }
-
-  function libellePeriode(id, b) {
-    if (id === "jour") return Utils.fmtDate(b.debut);
-    return "Du " + Utils.fmtDate(b.debut) + " au " + Utils.fmtDate(b.fin);
-  }
+  /* Le choix de période appartient à la vue : il survit aux réaffichages. */
+  const periode = { actif: "mois", libre: { debut: null, fin: null } };
 
   async function afficher(vue) {
     UI.entete({ titre: "Recettes & Dépenses", sous: "Chaque versement compte le jour où il est reçu" });
 
-    vue.innerHTML =
-      '<div class="puces" id="puces-periode">' +
-        PERIODES.map((p) =>
-          '<button type="button" class="puce' + (p.id === periodeActive ? " actif" : "") + '" data-periode="' + p.id + '">' +
-            e(p.label) + "</button>"
-        ).join("") +
-      "</div>" +
-      '<div id="zone-libre" hidden><div class="carte"><div class="champ-duo" style="margin:0">' +
-        '<div class="champ" style="margin:0"><label for="periode-debut">Du</label><input type="date" id="periode-debut"></div>' +
-        '<div class="champ" style="margin:0"><label for="periode-fin">Au</label><input type="date" id="periode-fin"></div>' +
-      "</div></div></div>" +
-      '<div id="zone-stats"></div>';
-
-    UI.$("#puces-periode").addEventListener("click", (ev) => {
-      const bouton = ev.target.closest("[data-periode]");
-      if (!bouton) return;
-      periodeActive = bouton.dataset.periode;
-      UI.$$("#puces-periode .puce").forEach((p) => p.classList.toggle("actif", p === bouton));
-      UI.$("#zone-libre").hidden = periodeActive !== "libre";
-      rendre();
-    });
-
-    const b0 = bornes("libre");
-    UI.$("#periode-debut").value = b0.debut;
-    UI.$("#periode-fin").value = b0.fin;
-    for (const idChamp of ["periode-debut", "periode-fin"]) {
-      UI.$("#" + idChamp).addEventListener("change", () => {
-        libre.debut = UI.$("#periode-debut").value || libre.debut;
-        libre.fin = UI.$("#periode-fin").value || libre.fin;
-        if (libre.debut && libre.fin && libre.debut > libre.fin) {
-          [libre.debut, libre.fin] = [libre.fin, libre.debut];
-          UI.$("#periode-debut").value = libre.debut;
-          UI.$("#periode-fin").value = libre.fin;
-        }
-        rendre();
-      });
-    }
-
-    UI.$("#zone-libre").hidden = periodeActive !== "libre";
+    vue.innerHTML = UI.gabaritPeriode(periode) + '<div id="zone-stats"></div>';
+    UI.brancherPeriode(periode, () => rendre());
 
     async function rendre() {
       const r = Store.lireReglages();
-      const b = bornes(periodeActive);
+      const b = UI.bornesPeriode(periode.actif, periode.libre);
       const stats = await Store.statsPeriode(b.debut, b.fin);
       const clients = await Store.listerClients();
       const parId = new Map(clients.map((c) => [c.id, c]));
@@ -88,7 +26,7 @@ const VueStats = (() => {
       let html =
         '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 0">' +
           '<p style="margin:0;flex:1;font-size:12.5px;color:var(--encre-tres-douce)">' +
-            e(libellePeriode(periodeActive, b)) + "</p>" +
+            e(UI.libellePeriode(periode.actif, b)) + "</p>" +
           '<button type="button" class="btn btn-clair btn-sm" id="btn-point">' +
             UI.icone("telecharger", "ic-sm") + "Récap A4</button>" +
         "</div>" +
@@ -183,8 +121,8 @@ const VueStats = (() => {
 
       /* Ajout d'une dépense */
       UI.$("#btn-point").onclick = () => {
-        UI.choisirImpression("Récapitulatif — " + libellePeriode(periodeActive, b),
-          () => Store.imprimerRapport(stats, b, libellePeriode(periodeActive, b)));
+        UI.choisirImpression("Récapitulatif — " + UI.libellePeriode(periode.actif, b),
+          () => Store.imprimerRapport(stats, b, UI.libellePeriode(periode.actif, b)));
       };
 
       const boutonJournal = UI.$("#btn-journal");
@@ -192,8 +130,8 @@ const VueStats = (() => {
         boutonJournal.onclick = () => {
           const nomParClient = {};
           for (const [id, c] of parId) nomParClient[id] = Utils.nomComplet(c);
-          UI.choisirImpression("Journal des versements — " + libellePeriode(periodeActive, b),
-            () => Store.imprimerJournal(stats, libellePeriode(periodeActive, b), nomParClient));
+          UI.choisirImpression("Journal des versements — " + UI.libellePeriode(periode.actif, b),
+            () => Store.imprimerJournal(stats, UI.libellePeriode(periode.actif, b), nomParClient));
         };
       }
 

@@ -189,6 +189,95 @@ const UI = (() => {
     );
   }
 
+  /* ---------- Sélecteur de période ----------
+     Partagé par les recettes de l'atelier, le tableau de bord du
+     superadministrateur et l'historique des renouvellements. */
+
+  const PERIODES = [
+    { id: "jour", label: "Aujourd'hui" },
+    { id: "semaine", label: "7 jours" },
+    { id: "mois", label: "Ce mois" },
+    { id: "annee", label: "Cette année" },
+    { id: "libre", label: "Choisir…" },
+  ];
+
+  /** Bornes ISO (aaaa-mm-jj) d'une période, bornes incluses. */
+  function bornesPeriode(id, libre) {
+    const auj = Utils.aujourdhui();
+    const l = libre || {};
+    if (id === "jour") return { debut: auj, fin: auj };
+    if (id === "semaine") return { debut: Utils.ajouterJours(auj, -6), fin: auj };
+    if (id === "mois") return { debut: auj.slice(0, 8) + "01", fin: auj };
+    if (id === "annee") return { debut: auj.slice(0, 5) + "01-01", fin: auj };
+    return { debut: l.debut || auj.slice(0, 8) + "01", fin: l.fin || auj };
+  }
+
+  function libellePeriode(id, b) {
+    if (id === "jour") return Utils.fmtDate(b.debut);
+    return "Du " + Utils.fmtDate(b.debut) + " au " + Utils.fmtDate(b.fin);
+  }
+
+  /** Le gabarit du sélecteur, à insérer là où il doit apparaître.
+      `prefixe` distingue plusieurs sélecteurs sur une même page. */
+  function gabaritPeriode(etat, prefixe) {
+    const p = prefixe || "periode";
+    return (
+      '<div class="puces" id="' + p + '-puces">' +
+        PERIODES.map((x) =>
+          '<button type="button" class="puce' + (x.id === etat.actif ? " actif" : "") + '"' +
+            ' data-periode="' + x.id + '">' + e(x.label) + "</button>"
+        ).join("") +
+      "</div>" +
+      '<div id="' + p + '-libre" hidden><div class="carte"><div class="champ-duo" style="margin:0">' +
+        '<div class="champ" style="margin:0"><label for="' + p + '-debut">Du</label>' +
+          '<input type="date" id="' + p + '-debut"></div>' +
+        '<div class="champ" style="margin:0"><label for="' + p + '-fin">Au</label>' +
+          '<input type="date" id="' + p + '-fin"></div>' +
+      "</div></div></div>"
+    );
+  }
+
+  /** Branche le sélecteur déjà inséré : `etat` ({actif, libre}) appartient
+      à l'appelant pour que le choix survive aux réaffichages. */
+  function brancherPeriode(etat, surChangement, prefixe) {
+    const p = prefixe || "periode";
+    const zoneLibre = $("#" + p + "-libre");
+    const champDebut = $("#" + p + "-debut");
+    const champFin = $("#" + p + "-fin");
+
+    $("#" + p + "-puces").addEventListener("click", (ev) => {
+      const bouton = ev.target.closest("[data-periode]");
+      if (!bouton) return;
+      etat.actif = bouton.dataset.periode;
+      $$("#" + p + "-puces .puce").forEach((x) => x.classList.toggle("actif", x === bouton));
+      zoneLibre.hidden = etat.actif !== "libre";
+      surChangement();
+    });
+
+    const depart = bornesPeriode("libre", etat.libre);
+    champDebut.value = depart.debut;
+    champFin.value = depart.fin;
+
+    for (const champ of [champDebut, champFin]) {
+      champ.addEventListener("change", () => {
+        etat.libre = etat.libre || {};
+        etat.libre.debut = champDebut.value || etat.libre.debut;
+        etat.libre.fin = champFin.value || etat.libre.fin;
+        /* Deux dates à l'envers : on les remet dans l'ordre. */
+        if (etat.libre.debut && etat.libre.fin && etat.libre.debut > etat.libre.fin) {
+          const t = etat.libre.debut;
+          etat.libre.debut = etat.libre.fin;
+          etat.libre.fin = t;
+          champDebut.value = etat.libre.debut;
+          champFin.value = etat.libre.fin;
+        }
+        surChangement();
+      });
+    }
+
+    zoneLibre.hidden = etat.actif !== "libre";
+  }
+
   /** Champ montant avec suffixe devise. */
   function champMontant({ id, label, valeur, obligatoire, aide, placeholder }) {
     const devise = Store.lireReglages().devise;
@@ -251,6 +340,7 @@ const UI = (() => {
     ouvrirFeuille, fermerFeuille, feuilleSansRappel, confirmer, choisirImpression,
     ouvrirVisionneuse, fermerVisionneuse,
     badgeStatut, pastilleClient, ligneCommande, vide,
+    PERIODES, bornesPeriode, libellePeriode, gabaritPeriode, brancherPeriode,
     champMontant, grilleMesures, lireGrilleMesures, lectureMesures,
   };
 })();

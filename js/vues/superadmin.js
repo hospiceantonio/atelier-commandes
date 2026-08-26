@@ -427,9 +427,26 @@ const VueSuperAdmin = (() => {
       : estCode(p) ? "Par code"
       : "Encaissé par vous";
 
+  /* Le choix de période survit aux réaffichages des deux vues. */
+  const periodePaiements = { actif: "annee", libre: { debut: null, fin: null } };
+  const periodeBord = { actif: "annee", libre: { debut: null, fin: null } };
+
+  /** Garde les enregistrements dont `champ` tombe dans [debut, fin], jours inclus. */
+  function surPeriode(liste, bornes, champ) {
+    const debut = new Date(bornes.debut + "T00:00:00");
+    const fin = new Date(bornes.fin + "T00:00:00");
+    fin.setDate(fin.getDate() + 1);
+    return liste.filter((l) => {
+      const valeur = l[champ || "cree_le"];
+      if (!valeur) return false;
+      const t = new Date(valeur);
+      return t >= debut && t < fin;
+    });
+  }
+
   async function paiements(vue) {
     const profil = Api.lireProfil();
-    const [liste, ateliers] = await Promise.all([
+    const [toutes, ateliers] = await Promise.all([
       Api.lister("paiements_abonnement", "cree_le", false),
       Api.lister("ateliers"),
     ]);
@@ -437,98 +454,111 @@ const VueSuperAdmin = (() => {
     for (const a of ateliers) parId[a.id] = a;
 
     const devise = (ateliers[0] && ateliers[0].devise) || "FCFA";
-    const total = liste.reduce((s, p) => s + (Number(p.montant) || 0), 0);
-    const debutMois = new Date();
-    debutMois.setDate(1);
-    debutMois.setHours(0, 0, 0, 0);
-    const ceMois = liste.filter((p) => new Date(p.cree_le) >= debutMois);
-    const totalMois = ceMois.reduce((s, p) => s + (Number(p.montant) || 0), 0);
-    const enLigne = liste.filter(estMobileMoney);
+    const total = toutes.reduce((s, p) => s + (Number(p.montant) || 0), 0);
 
     UI.entete({
       titre: "Renouvellements",
-      sous: liste.length + " paiement" + (liste.length > 1 ? "s" : "") + " enregistré" + (liste.length > 1 ? "s" : ""),
+      sous: toutes.length + " paiement" + (toutes.length > 1 ? "s" : "") + " enregistré" + (toutes.length > 1 ? "s" : ""),
       retour: true,
-      actions: liste.length
+      actions: toutes.length
         ? '<button type="button" class="btn-ic" id="rn-imprimer" aria-label="Imprimer les renouvellements">' +
             UI.icone("telecharger") + "</button>"
         : "",
     });
 
-    if (!liste.length) {
+    if (!toutes.length) {
       vue.innerHTML = UI.vide("argent", "Aucun renouvellement",
         "Les paiements Mobile Money de vos ateliers et vos renouvellements « + 1 mois » " +
         "apparaîtront ici, avec les totaux.");
       return;
     }
 
-    /* Regroupement par mois, du plus récent au plus ancien. */
-    const parMois = {};
-    for (const p of liste) {
-      const d = new Date(p.cree_le);
-      const cle = d.getFullYear() + "-" + Utils.pad(d.getMonth() + 1);
-      (parMois[cle] = parMois[cle] || []).push(p);
-    }
+    vue.innerHTML = UI.gabaritPeriode(periodePaiements, "rn") + '<div id="rn-zone"></div>';
+    UI.brancherPeriode(periodePaiements, () => rendre(), "rn");
+    rendre();
 
-    vue.innerHTML =
-      '<div class="tuiles">' +
-        '<div class="tuile tuile-vert"><div class="tuile-label">' + UI.icone("argent", "ic-sm") + "Ce mois-ci</div>" +
-          '<div class="tuile-valeur">' + Utils.fmtMontant(totalMois, devise) + "</div>" +
-          '<div class="tuile-note">' + ceMois.length + " renouvellement" + (ceMois.length > 1 ? "s" : "") + "</div></div>" +
-        '<div class="tuile"><div class="tuile-label">' + UI.icone("stats", "ic-sm") + "Total encaissé</div>" +
-          '<div class="tuile-valeur">' + Utils.fmtMontant(total, devise) + "</div>" +
-          '<div class="tuile-note">depuis le début</div></div>' +
-        '<div class="tuile"><div class="tuile-label">' + UI.icone("tel", "ic-sm") + "Mobile Money</div>" +
-          '<div class="tuile-valeur">' + enLigne.length + "</div>" +
-          '<div class="tuile-note">sur ' + liste.length + " paiement" + (liste.length > 1 ? "s" : "") + "</div></div>" +
-        '<div class="tuile"><div class="tuile-label">' + UI.icone("clients", "ic-sm") + "Ateliers payants</div>" +
-          '<div class="tuile-valeur">' + new Set(liste.map((p) => p.atelier_id)).size + "</div>" +
-          '<div class="tuile-note">ont renouvelé au moins une fois</div></div>' +
-      "</div>" +
+    function rendre() {
+      const b = UI.bornesPeriode(periodePaiements.actif, periodePaiements.libre);
+      const libelle = UI.libellePeriode(periodePaiements.actif, b);
+      const liste = surPeriode(toutes, b);
+      const somme = (t) => t.reduce((s, p) => s + (Number(p.montant) || 0), 0);
+      const enLigne = liste.filter(estMobileMoney);
 
-      Object.keys(parMois).sort().reverse().map((cle) => {
-        const [annee, mois] = cle.split("-");
-        const somme = parMois[cle].reduce((s, p) => s + (Number(p.montant) || 0), 0);
-        return (
-          '<div class="section-titre">' +
-            e(Utils.MOIS[Number(mois) - 1] + " " + annee) +
-            '<span class="lien">' + Utils.fmtMontant(somme, devise) + "</span>" +
-          "</div>" +
-          '<div class="carte"><div class="mini-liste">' +
-          parMois[cle].map((p) => {
-            const atelier = parId[p.atelier_id];
-            return (
-              '<div class="mini">' +
-                '<span class="l"><strong>' + e(atelier ? atelier.nom : "Atelier supprimé") + "</strong>" +
-                  '<br><span style="color:var(--encre-tres-douce);font-size:12px">' +
-                    Utils.fmtDateHeure(p.cree_le) + " · " +
-                    modeRenouvellement(p) +
-                    (p.mois > 1 ? " · " + p.mois + " mois" : "") +
-                  "</span></span>" +
-                '<span class="v" style="color:var(--vert)">+' +
-                  Utils.fmtMontant(p.montant, (atelier && atelier.devise) || devise) + "</span>" +
-              "</div>"
-            );
-          }).join("") +
-          "</div></div>"
-        );
-      }).join("") +
-      '<p class="pied-note">Les paiements Mobile Money sont inscrits par le serveur ; ' +
-        "les renouvellements « + 1 mois » sont ceux que vous encaissez vous-même.</p>";
+      /* Regroupement par mois, du plus récent au plus ancien. */
+      const parMois = {};
+      for (const p of liste) {
+        const d = new Date(p.cree_le);
+        const cle = d.getFullYear() + "-" + Utils.pad(d.getMonth() + 1);
+        (parMois[cle] = parMois[cle] || []).push(p);
+      }
 
-    const boutonImprimer = UI.$("#rn-imprimer");
-    if (boutonImprimer) {
-      boutonImprimer.onclick = () => {
-        UI.choisirImpression("Renouvellements — " + Utils.fmtDate(Utils.aujourdhui()),
-          () => Utils.imprimerA4("Renouvellements Atelier",
-            renouvellementsA4(liste, ateliers, devise, profil)));
-      };
+      UI.$("#rn-zone").innerHTML =
+        '<p style="margin:2px 0 0;font-size:12.5px;color:var(--encre-tres-douce)">' +
+          e(libelle) + "</p>" +
+
+        '<div class="tuiles">' +
+          '<div class="tuile tuile-vert"><div class="tuile-label">' + UI.icone("argent", "ic-sm") + "Sur la période</div>" +
+            '<div class="tuile-valeur">' + Utils.fmtMontant(somme(liste), devise) + "</div>" +
+            '<div class="tuile-note">' + liste.length + " renouvellement" + (liste.length > 1 ? "s" : "") + "</div></div>" +
+          '<div class="tuile"><div class="tuile-label">' + UI.icone("stats", "ic-sm") + "Total encaissé</div>" +
+            '<div class="tuile-valeur">' + Utils.fmtMontant(total, devise) + "</div>" +
+            '<div class="tuile-note">depuis le début</div></div>' +
+          '<div class="tuile"><div class="tuile-label">' + UI.icone("tel", "ic-sm") + "Mobile Money</div>" +
+            '<div class="tuile-valeur">' + enLigne.length + "</div>" +
+            '<div class="tuile-note">sur ' + liste.length + " paiement" + (liste.length > 1 ? "s" : "") + "</div></div>" +
+          '<div class="tuile"><div class="tuile-label">' + UI.icone("clients", "ic-sm") + "Ateliers payants</div>" +
+            '<div class="tuile-valeur">' + new Set(liste.map((p) => p.atelier_id)).size + "</div>" +
+            '<div class="tuile-note">ont renouvelé sur la période</div></div>' +
+        "</div>" +
+
+        (liste.length
+          ? Object.keys(parMois).sort().reverse().map((cle) => {
+              const [annee, mois] = cle.split("-");
+              return (
+                '<div class="section-titre">' +
+                  e(Utils.MOIS[Number(mois) - 1] + " " + annee) +
+                  '<span class="lien">' + Utils.fmtMontant(somme(parMois[cle]), devise) + "</span>" +
+                "</div>" +
+                '<div class="carte"><div class="mini-liste">' +
+                parMois[cle].map((p) => {
+                  const atelier = parId[p.atelier_id];
+                  return (
+                    '<div class="mini">' +
+                      '<span class="l"><strong>' + e(atelier ? atelier.nom : "Atelier supprimé") + "</strong>" +
+                        '<br><span style="color:var(--encre-tres-douce);font-size:12px">' +
+                          Utils.fmtDateHeure(p.cree_le) + " · " +
+                          modeRenouvellement(p) +
+                          (p.mois > 1 ? " · " + p.mois + " mois" : "") +
+                        "</span></span>" +
+                      '<span class="v" style="color:var(--vert)">+' +
+                        Utils.fmtMontant(p.montant, (atelier && atelier.devise) || devise) + "</span>" +
+                    "</div>"
+                  );
+                }).join("") +
+                "</div></div>"
+              );
+            }).join("")
+          : UI.vide("argent", "Aucun renouvellement sur cette période",
+              "Choisissez une autre période pour voir les paiements concernés.")) +
+
+        '<p class="pied-note">Les paiements Mobile Money sont inscrits par le serveur ; ' +
+          "les renouvellements « + 1 mois » sont ceux que vous encaissez vous-même.</p>";
+
+      const boutonImprimer = UI.$("#rn-imprimer");
+      if (boutonImprimer) {
+        boutonImprimer.onclick = () => {
+          UI.choisirImpression("Renouvellements — " + libelle,
+            () => Utils.imprimerA4("Renouvellements Atelier",
+              renouvellementsA4(liste, ateliers, devise, profil, libelle, total)));
+        };
+      }
     }
   }
 
   /** Journal des renouvellements au format A4 : totaux, détail par mois,
-      puis récapitulatif par atelier. */
-  function renouvellementsA4(liste, ateliers, devise, profil) {
+      puis récapitulatif par atelier. `liste` ne contient que la période
+      demandée ; `totalGeneral` rappelle le cumul depuis le début. */
+  function renouvellementsA4(liste, ateliers, devise, profil, libellePeriode, totalGeneral) {
     const m = (v) => Utils.fmtMontant(v, devise);
     const parId = {};
     for (const a of ateliers) parId[a.id] = a;
@@ -537,10 +567,7 @@ const VueSuperAdmin = (() => {
     const somme = (t) => t.reduce((s, p) => s + montant(p), 0);
 
     const total = somme(liste);
-    const debutMois = new Date();
-    debutMois.setDate(1);
-    debutMois.setHours(0, 0, 0, 0);
-    const ceMois = liste.filter((p) => new Date(p.cree_le) >= debutMois);
+    const cumul = totalGeneral === undefined ? total : totalGeneral;
     const enLigne = liste.filter(estMobileMoney);
     const codes = liste.filter(estCode);
 
@@ -610,19 +637,19 @@ const VueSuperAdmin = (() => {
         "<div class='marque'><h1>Atelier</h1>" +
           "<p>Plateforme de gestion pour ateliers de couture</p></div>" +
         "<div class='titre'><h2>RENOUVELLEMENTS</h2>" +
+          (libellePeriode ? "<p><strong>" + e(libellePeriode) + "</strong></p>" : "") +
           "<p>Édité le " + e(Utils.fmtDate(Utils.aujourdhui())) + "</p>" +
           "<p>" + e(profil ? (profil.nom_complet || profil.email) : "") + "</p></div>" +
       "</div>" +
 
       "<div class='resume'>" +
-        bloc("Ce mois-ci", m(somme(ceMois)),
-          ceMois.length + " renouvellement" + (ceMois.length > 1 ? "s" : ""), "#0F9D58") +
-        bloc("Total encaissé", m(total),
-          liste.length + " paiement" + (liste.length > 1 ? "s" : "") + " depuis le début", "#0F9D58") +
+        bloc("Sur la période", m(total),
+          liste.length + " renouvellement" + (liste.length > 1 ? "s" : ""), "#0F9D58") +
+        bloc("Total encaissé", m(cumul), "depuis le début", "#0F9D58") +
         bloc("Mobile Money", enLigne.length,
           m(somme(enLigne)) + " en ligne", "") +
         bloc("Ateliers payants", ateliersTries.length,
-          "ont renouvelé au moins une fois", "") +
+          "ont renouvelé sur la période", "") +
       "</div>" +
 
       mois.map((cle) => {
@@ -647,16 +674,18 @@ const VueSuperAdmin = (() => {
       }).join("") +
 
       "<h3>Récapitulatif par atelier (" + ateliersTries.length + ")</h3>" +
-      "<table><thead><tr><th>Atelier</th><th class='num'>Renouvellements</th>" +
-        "<th class='num'>Dernier</th><th class='num'>Total versé</th></tr></thead><tbody>" +
-      ateliersTries.map((f) =>
-        "<tr><td>" + e(f.nom) + "</td>" +
-          "<td class='num'>" + f.nb + "</td>" +
-          "<td class='num'>" + e(Utils.fmtDate(Utils.isoJour(new Date(f.dernier)))) + "</td>" +
-          "<td class='num'>" + m(f.total) + "</td></tr>"
-      ).join("") +
-      "</tbody><tfoot><tr><td colspan='3'>Total général</td>" +
-        "<td class='num'>" + m(total) + "</td></tr></tfoot></table>" +
+      (ateliersTries.length
+        ? "<table><thead><tr><th>Atelier</th><th class='num'>Renouvellements</th>" +
+            "<th class='num'>Dernier</th><th class='num'>Total versé</th></tr></thead><tbody>" +
+          ateliersTries.map((f) =>
+            "<tr><td>" + e(f.nom) + "</td>" +
+              "<td class='num'>" + f.nb + "</td>" +
+              "<td class='num'>" + e(Utils.fmtDate(Utils.isoJour(new Date(f.dernier)))) + "</td>" +
+              "<td class='num'>" + m(f.total) + "</td></tr>"
+          ).join("") +
+          "</tbody><tfoot><tr><td colspan='3'>Total de la période</td>" +
+            "<td class='num'>" + m(total) + "</td></tr></tfoot></table>"
+        : "<p style='color:#8b8fa8'>Aucun renouvellement sur cette période.</p>") +
 
       "<div class='pied'><span>Atelier — journal des renouvellements d'abonnement</span>" +
         "<span>" + enLigne.length + " Mobile Money · " + codes.length + " par code · " +
@@ -665,12 +694,15 @@ const VueSuperAdmin = (() => {
     );
   }
 
-  /** Tableau de bord au format A4 : indicateurs puis état des ateliers. */
-  function tableauBordA4(stats, ateliers, devise, profil) {
+  /** Tableau de bord au format A4 : indicateurs puis état des ateliers.
+      `libellePeriode` décrit la période couverte par les compteurs. */
+  function tableauBordA4(stats, ateliers, devise, profil, libellePeriode) {
     const m = (v) => Utils.fmtMontant(v, devise);
     const jourFin = (a) => Utils.fmtDate(Utils.isoJour(new Date(a.abonnement_fin)));
     const tries = ateliers.slice().sort((x, y) => finAbonnement(y) - finAbonnement(x));
     const actifs = tries.filter(actif);
+    /* Repli sur les totaux si la base n'expose pas encore la période. */
+    const p = (cle, secours) => (stats[cle] === undefined ? stats[secours] : stats[cle]);
 
     const bloc = (l, v, n, couleur) =>
       "<div class='case'><div class='l'>" + e(l) + "</div>" +
@@ -711,6 +743,7 @@ const VueSuperAdmin = (() => {
         "<div class='marque'><h1>Atelier</h1>" +
           "<p>Plateforme de gestion pour ateliers de couture</p></div>" +
         "<div class='titre'><h2>TABLEAU DE BORD</h2>" +
+          (libellePeriode ? "<p><strong>" + e(libellePeriode) + "</strong></p>" : "") +
           "<p>Édité le " + e(Utils.fmtDate(Utils.aujourdhui())) + "</p>" +
           "<p>" + e(profil ? (profil.nom_complet || profil.email) : "") + "</p></div>" +
       "</div>" +
@@ -718,18 +751,25 @@ const VueSuperAdmin = (() => {
       "<div class='resume'>" +
         bloc("Ateliers", stats.ateliers,
           stats.ateliers_actifs + " actif" + (stats.ateliers_actifs > 1 ? "s" : "") +
-          (stats.ateliers_mois ? " · " + stats.ateliers_mois + " ce mois" : ""), "") +
-        bloc("Encaissé ce mois", m(stats.encaisse_mois),
-          stats.renouvellements + " renouvellement" + (stats.renouvellements > 1 ? "s" : "") + " au total", "#0F9D58") +
-        bloc("Total encaissé", m(stats.encaisse_total), "depuis le début", "#0F9D58") +
+          (p("ateliers_periode", "ateliers_mois")
+            ? " · " + p("ateliers_periode", "ateliers_mois") + " sur la période" : ""), "") +
+        bloc("Encaissé sur la période", m(p("encaisse_periode", "encaisse_mois")),
+          p("renouvellements_periode", "renouvellements") + " renouvellement" +
+          (p("renouvellements_periode", "renouvellements") > 1 ? "s" : ""), "#0F9D58") +
+        bloc("Total encaissé", m(stats.encaisse_total),
+          "depuis le début · " + stats.renouvellements + " au total", "#0F9D58") +
       "</div>" +
 
       "<div class='resume petit'>" +
-        bloc("Réalisations", stats.realisations, stats.realisations_en_avant + " à la une", "") +
-        bloc("Commandes livrées", stats.commandes_livrees,
-          "sur " + stats.commandes + " commande" + (stats.commandes > 1 ? "s" : ""), "") +
-        bloc("Factures éditées", stats.factures, m(stats.factures_montant) + " vendus", "") +
-        bloc("Clients suivis", stats.clients, "tous ateliers confondus", "") +
+        bloc("Réalisations postées", p("realisations_periode", "realisations"),
+          stats.realisations + " au total", "") +
+        bloc("Commandes livrées", p("commandes_livrees_periode", "commandes_livrees"),
+          p("commandes_periode", "commandes") + " créée" +
+          (p("commandes_periode", "commandes") > 1 ? "s" : "") + " sur la période", "") +
+        bloc("Factures éditées", p("factures_periode", "factures"),
+          m(p("factures_montant_periode", "factures_montant")) + " vendus", "") +
+        bloc("Nouveaux clients", p("clients_periode", "clients"),
+          stats.clients + " suivis au total", "") +
       "</div>" +
 
       "<div class='resume petit'>" +
@@ -1076,23 +1116,32 @@ const VueSuperAdmin = (() => {
         '<div class="tuile-valeur">' + valeur + "</div>" +
         '<div class="tuile-note">' + note + "</div></div>";
 
+    /* Les compteurs « _periode » manquent tant que la base n'est pas à jour :
+       on retombe alors sur les totaux depuis le début. */
+    const p = (cle, secours) => (s[cle] === undefined ? s[secours] : s[cle]);
+
     return (
       '<div class="tuiles">' +
         tuile("", "clients", "Ateliers", s.ateliers,
           s.ateliers_actifs + " actif" + (s.ateliers_actifs > 1 ? "s" : "") +
-          (s.ateliers_mois ? " · " + s.ateliers_mois + " ce mois" : "")) +
-        tuile("tuile-vert", "argent", "Encaissé ce mois", Utils.fmtMontant(s.encaisse_mois, devise),
-          s.renouvellements + " renouvellement" + (s.renouvellements > 1 ? "s" : "") + " au total") +
+          (p("ateliers_periode", "ateliers_mois") ?
+            " · " + p("ateliers_periode", "ateliers_mois") + " sur la période" : "")) +
+        tuile("tuile-vert", "argent", "Encaissé sur la période",
+          Utils.fmtMontant(p("encaisse_periode", "encaisse_mois"), devise),
+          p("renouvellements_periode", "renouvellements") + " renouvellement" +
+          (p("renouvellements_periode", "renouvellements") > 1 ? "s" : "")) +
         tuile("tuile-vert", "stats", "Total encaissé", Utils.fmtMontant(s.encaisse_total, devise),
-          "depuis le début") +
-        tuile("", "boutique", "Réalisations", s.realisations,
-          s.realisations_en_avant + " à la une") +
-        tuile("", "check", "Commandes livrées", s.commandes_livrees,
-          "sur " + s.commandes + " commande" + (s.commandes > 1 ? "s" : "")) +
-        tuile("", "argent", "Factures éditées", s.factures,
-          Utils.fmtMontant(s.factures_montant, devise) + " de ventes en boutique") +
-        tuile("", "clients", "Clients suivis", s.clients,
-          "par l'ensemble des ateliers") +
+          "depuis le début · " + s.renouvellements + " au total") +
+        tuile("", "boutique", "Réalisations postées", p("realisations_periode", "realisations"),
+          s.realisations + " au total · " + s.realisations_en_avant + " à la une") +
+        tuile("", "check", "Commandes livrées", p("commandes_livrees_periode", "commandes_livrees"),
+          p("commandes_periode", "commandes") + " créée" +
+          (p("commandes_periode", "commandes") > 1 ? "s" : "") + " sur la période") +
+        tuile("", "argent", "Factures éditées", p("factures_periode", "factures"),
+          Utils.fmtMontant(p("factures_montant_periode", "factures_montant"), devise) +
+          " de ventes en boutique") +
+        tuile("", "clients", "Nouveaux clients", p("clients_periode", "clients"),
+          s.clients + " suivis au total") +
         tuile("", "connexion", "Comptes", s.administrateurs + s.moderateurs,
           s.administrateurs + " admin · " + s.moderateurs + " modérateur" + (s.moderateurs > 1 ? "s" : "")) +
       "</div>"
@@ -1104,9 +1153,20 @@ const VueSuperAdmin = (() => {
     const prm = Api.lireParametres();
     const ateliers = await Api.lister("ateliers");
     const devise = (ateliers[0] && ateliers[0].devise) || "FCFA";
+    /* L'ancienne fonction SQL n'accepte pas de période : on retombe dessus
+       tant que la base n'est pas à jour, plutôt que de vider l'écran. */
+    const lireStats = async (b) => {
+      try {
+        return await Api.rpc("statistiques_plateforme", { p_debut: b.debut, p_fin: b.fin });
+      } catch (_) {
+        return await Api.rpc("statistiques_plateforme");
+      }
+    };
+
+    const bornes0 = UI.bornesPeriode(periodeBord.actif, periodeBord.libre);
     let stats = null;
     try {
-      stats = await Api.rpc("statistiques_plateforme");
+      stats = await lireStats(bornes0);
     } catch (_) { /* base pas encore à jour : le tableau de bord attend */ }
 
     UI.entete({
@@ -1120,7 +1180,7 @@ const VueSuperAdmin = (() => {
     });
     vue.innerHTML =
       (stats
-        ? tuilesTableauBord(stats, devise)
+        ? UI.gabaritPeriode(periodeBord, "tb") + '<div id="tb-zone"></div>'
         : '<div class="carte"><div class="carte-titre">Tableau de bord</div>' +
             '<p style="margin:0;font-size:13px;line-height:1.5;color:var(--encre-douce)">' +
             "Mettez la base à jour (exécutez <code>supabase/schema.sql</code> dans l'éditeur SQL " +
@@ -1203,13 +1263,43 @@ const VueSuperAdmin = (() => {
 
       '<button type="button" class="btn btn-danger btn-bloc" id="sa-deconnexion">Se déconnecter</button>';
 
-    const boutonImprimer = UI.$("#tb-imprimer");
-    if (boutonImprimer) {
-      boutonImprimer.onclick = () => {
-        UI.choisirImpression("Tableau de bord — " + Utils.fmtDate(Utils.aujourdhui()),
-          () => Utils.imprimerA4("Tableau de bord Atelier",
-            tableauBordA4(stats, ateliers, devise, profil)));
-      };
+    if (stats) {
+      UI.brancherPeriode(periodeBord, () => rendreBord(), "tb");
+      rendreBord();
+    }
+
+    /** Recharge les compteurs du serveur pour la période choisie. */
+    async function rendreBord() {
+      const b = UI.bornesPeriode(periodeBord.actif, periodeBord.libre);
+      const libelle = UI.libellePeriode(periodeBord.actif, b);
+      const zone = UI.$("#tb-zone");
+      try {
+        stats = await lireStats(b);
+      } catch (err) {
+        UI.toast("Chiffres indisponibles : " + err.message, "erreur");
+        return;
+      }
+      if (!UI.$("#tb-zone")) return; /* la vue a changé entre-temps */
+      /* Sans les compteurs de période, le sélecteur n'aurait aucun effet :
+         mieux vaut le dire que laisser croire à un filtre qui fonctionne. */
+      const filtreActif = stats.encaisse_periode !== undefined;
+      zone.innerHTML =
+        '<p style="margin:2px 0 0;font-size:12.5px;color:var(--encre-tres-douce)">' +
+          (filtreActif
+            ? e(libelle)
+            : "Chiffres depuis le début — exécutez <code>supabase/schema.sql</code> " +
+              "pour filtrer par période.") +
+        "</p>" +
+        tuilesTableauBord(stats, devise);
+
+      const boutonImprimer = UI.$("#tb-imprimer");
+      if (boutonImprimer) {
+        boutonImprimer.onclick = () => {
+          UI.choisirImpression("Tableau de bord — " + libelle,
+            () => Utils.imprimerA4("Tableau de bord Atelier",
+              tableauBordA4(stats, ateliers, devise, profil, libelle)));
+        };
+      }
     }
 
     const formulaireKkiapay = UI.$("#form-kkiapay");

@@ -683,41 +683,78 @@ create policy paiements_creation on public.paiements_abonnement for insert to au
 -- Renvoie des compteurs, jamais des données d'atelier : le
 -- superadministrateur voit l'activité de la plateforme sans accéder aux
 -- clients, aux mesures ni aux commandes de ses ateliers abonnés.
-create or replace function public.statistiques_plateforme()
-returns jsonb language plpgsql stable security definer set search_path = public as
+-- La version sans période est remplacée par celle qui en accepte une :
+-- sans le drop, un appel sans argument deviendrait ambigu entre les deux.
+drop function if exists public.statistiques_plateforme();
+
+-- p_debut / p_fin sont des jours (bornes incluses). Laissés à null,
+-- seuls les totaux depuis le début sont renseignés.
+create or replace function public.statistiques_plateforme(
+  p_debut date default null, p_fin date default null
+) returns jsonb language plpgsql stable security definer set search_path = public as
 $$
+declare
+  d timestamptz;
+  f timestamptz;
 begin
   if public.role_courant() is distinct from 'superadmin' then
     raise exception 'Réservé au superadministrateur';
   end if;
+
+  -- Bornes incluses : tout le jour de fin compte, d'où le + 1 jour.
+  d := coalesce(p_debut, '-infinity'::date)::timestamptz;
+  f := case when p_fin is null then 'infinity'::timestamptz
+            else (p_fin + 1)::timestamptz end;
+
   return jsonb_build_object(
+    -- État actuel de la plateforme : indépendant de la période.
     'ateliers',             (select count(*) from public.ateliers),
     'ateliers_actifs',      (select count(*) from public.ateliers where abonnement_fin > now()),
-    'ateliers_mois',        (select count(*) from public.ateliers where cree_le >= date_trunc('month', now())),
     'administrateurs',      (select count(*) from public.profils where role = 'admin' and atelier_id is not null),
     'moderateurs',          (select count(*) from public.profils where role = 'moderateur'),
+    'bannieres',            (select count(*) from public.bannieres where active),
+    'codes_disponibles',    (select count(*) from public.codes_abonnement where utilise_le is null),
+
+    -- Totaux depuis le début.
     'encaisse_total',       (select coalesce(sum(montant), 0) from public.paiements_abonnement),
-    'encaisse_mois',        (select coalesce(sum(montant), 0) from public.paiements_abonnement
-                             where cree_le >= date_trunc('month', now())),
     'renouvellements',      (select count(*) from public.paiements_abonnement),
     'realisations',         (select count(*) from public.produits),
     'realisations_en_avant',(select count(*) from public.produits where en_avant),
     'clients',              (select count(*) from public.clients),
     'commandes',            (select count(*) from public.commandes),
     'commandes_livrees',    (select count(*) from public.commandes where statut = 'livree'),
-    'commandes_mois',       (select count(*) from public.commandes where cree_le >= date_trunc('month', now())),
     'factures',             (select count(*) from public.ventes),
     'factures_montant',     (select coalesce(sum(total), 0) from public.ventes),
-    'factures_mois',        (select count(*) from public.ventes where cree_le >= date_trunc('month', now())),
-    'bannieres',            (select count(*) from public.bannieres where active),
-    'codes_disponibles',    (select count(*) from public.codes_abonnement where utilise_le is null),
-    'codes_utilises',       (select count(*) from public.codes_abonnement where utilise_le is not null)
+    'codes_utilises',       (select count(*) from public.codes_abonnement where utilise_le is not null),
+
+    -- Activité de la période demandée.
+    'ateliers_periode',     (select count(*) from public.ateliers
+                             where cree_le >= d and cree_le < f),
+    'encaisse_periode',     (select coalesce(sum(montant), 0) from public.paiements_abonnement
+                             where cree_le >= d and cree_le < f),
+    'renouvellements_periode', (select count(*) from public.paiements_abonnement
+                             where cree_le >= d and cree_le < f),
+    'realisations_periode', (select count(*) from public.produits
+                             where cree_le >= d and cree_le < f),
+    'clients_periode',      (select count(*) from public.clients
+                             where cree_le >= d and cree_le < f),
+    'commandes_periode',    (select count(*) from public.commandes
+                             where cree_le >= d and cree_le < f),
+    -- Une commande compte le jour où elle est livrée, pas celui de sa création.
+    'commandes_livrees_periode', (select count(*) from public.commandes
+                             where livre_le is not null and livre_le >= d and livre_le < f),
+    'factures_periode',     (select count(*) from public.ventes
+                             where cree_le >= d and cree_le < f),
+    'factures_montant_periode', (select coalesce(sum(total), 0) from public.ventes
+                             where cree_le >= d and cree_le < f),
+    'codes_utilises_periode', (select count(*) from public.codes_abonnement
+                             where utilise_le is not null and utilise_le >= d and utilise_le < f)
   );
 end
 $$;
 
-revoke all on function public.statistiques_plateforme() from public, anon;
-grant execute on function public.statistiques_plateforme() to authenticated;
+revoke all on function public.statistiques_plateforme(date, date) from public, anon;
+grant execute on function public.statistiques_plateforme(date, date) to authenticated;
 
 -- =========================================================
 -- Bannières du carrousel d'accueil (superadministrateur)
