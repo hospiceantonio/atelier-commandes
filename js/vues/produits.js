@@ -60,8 +60,9 @@ const VueProduits = (() => {
                 ? '<span class="pastille"><img src="' + p.couverture + '" alt=""></span>'
                 : '<span class="pastille">' + UI.icone("image", "ic-sm") + "</span>") +
               '<span class="ligne-corps">' +
-                '<span class="ligne-titre">' + e(p.nom) + "</span>" +
-                '<span class="ligne-sous">' + (p.code ? e(p.code) : "Sans code") + "</span>" +
+                '<span class="ligne-titre">' + (p.en_avant ? "★ " : "") + e(p.nom) + "</span>" +
+                '<span class="ligne-sous">' + (p.code ? e(p.code) : "Sans code") +
+                  (p.en_avant ? " · À la une" : "") + "</span>" +
               "</span>" +
               '<span class="ligne-fin">' +
                 (p.stock > 0
@@ -126,6 +127,11 @@ const VueProduits = (() => {
             '<input type="checkbox" id="prod-prix-visible"' +
               (!produit || produit.prix_visible ? " checked" : "") + ">" +
             "<span>Afficher le prix dans la boutique publique (sinon : « Prix sur demande »)</span>" +
+          "</label>" +
+          '<label class="interrupteur" style="display:flex">' +
+            '<input type="checkbox" id="prod-avant"' + (produit && produit.en_avant ? " checked" : "") + ">" +
+            "<span>Mettre en avant : la réalisation ouvre l'accueil de la boutique, " +
+              "dans le carrousel <strong>À la une</strong></span>" +
           "</label>" +
           '<div class="champ" style="margin-top:14px"><label for="prod-stock">Stock disponible</label>' +
             '<input id="prod-stock" inputmode="numeric" autocomplete="off" value="' +
@@ -199,6 +205,7 @@ const VueProduits = (() => {
           categorie: UI.$("#prod-categorie").value.trim() || "Autres",
           prix,
           prix_visible: UI.$("#prod-prix-visible").checked,
+          en_avant: UI.$("#prod-avant").checked,
           stock: Math.max(0, Math.round(Utils.lireNombre(UI.$("#prod-stock").value))),
           couverture: photos.length ? await miniature(photos[0]) : "",
           modifie_le: new Date().toISOString(),

@@ -524,6 +524,9 @@ grant select on public.ateliers_publics to anon, authenticated;
 -- Le stock ne concerne que l'atelier : il n'est jamais affiché au public.
 alter table public.produits add column if not exists stock integer not null default 0;
 
+-- Mise en avant : ces réalisations ouvrent l'accueil de la boutique.
+alter table public.produits add column if not exists en_avant boolean not null default false;
+
 alter table public.compteurs add column if not exists prochaine_facture integer not null default 1;
 alter table public.ventes add column if not exists client_whatsapp text not null default '';
 

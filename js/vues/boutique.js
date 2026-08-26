@@ -56,6 +56,23 @@ const VueBoutique = (() => {
 
   /* ---------- Accueil public : toutes les réalisations ---------- */
 
+  /** Grande carte du carrousel « À la une ». */
+  function carteAvant(p, atelier) {
+    return (
+      '<a class="carte-avant" href="#/produit/' + p.id + '">' +
+        (p.couverture
+          ? '<img src="' + p.couverture + '" alt="" loading="lazy">'
+          : '<span class="produit-photo-vide">' + UI.icone("image") + "</span>") +
+        '<span class="carte-avant-voile">' +
+          '<span class="produit-nom">' + e(p.nom) + "</span>" +
+          (atelier ? '<span class="carte-avant-atelier">' + e(atelier.nom) + "</span>" : "") +
+          '<span class="carte-avant-prix">' +
+            (p.prix_visible ? fmtPrix(p, atelier) : "Prix sur demande") + "</span>" +
+        "</span>" +
+      "</a>"
+    );
+  }
+
   async function accueil(vue) {
     const { produits, parId } = await chargerCatalogue();
 
@@ -66,7 +83,17 @@ const VueBoutique = (() => {
         "Les ateliers ajouteront bientôt leurs créations — revenez vite !");
       return;
     }
+
+    const enAvant = produits.filter((p) => p.en_avant);
+
     vue.innerHTML =
+      (enAvant.length
+        ? '<div class="titre-categorie" style="margin-top:0">★ À la une</div>' +
+          '<div class="carrousel" id="carrousel-avant">' +
+            enAvant.map((p) => carteAvant(p, parId[p.atelier_id])).join("") +
+          "</div>" +
+          '<div class="titre-categorie">Toutes les réalisations</div>'
+        : "") +
       '<div class="grille-produits">' +
         produits.map((p) => carteProduit(p, parId[p.atelier_id])).join("") +
       "</div>";
