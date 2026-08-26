@@ -53,6 +53,9 @@ dependencies {
 // L'application web du dépôt est embarquée telle quelle dans l'APK
 // (sw.js exclu : le cache hors ligne est inutile, tout est déjà local).
 tasks.register('copierWeb', Copy) {
+  // Toujours recopier : un « à jour » erroné embarquerait une version
+  // ancienne de l'application dans l'APK.
+  outputs.upToDateWhen { false }
   from(rootDir.parentFile) {
     include 'index.html', 'styles.css', 'manifest.webmanifest', 'js/**', 'icons/**'
   }

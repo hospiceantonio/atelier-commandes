@@ -32,9 +32,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+          # Sans cela, le cache Gradle a déjà restitué des fichiers web
+          # périmés : l'APK publié mélangeait alors deux versions.
+          cache-disabled: true
 
       - name: Construire l'APK signé
-        run: gradle -p android assembleRelease --no-daemon
+        run: gradle -p android clean assembleRelease --no-daemon
 
       - name: Publier dans la release « apk »
         env:
