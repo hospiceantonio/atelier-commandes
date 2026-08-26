@@ -454,6 +454,8 @@ details.bloc > .contenu{padding:0 14px 14px}
   padding:26px 14px 12px;
   background:linear-gradient(to top,rgba(10,11,32,.88),rgba(10,11,32,0));
 }
+.carte-banniere{border:0;padding:0;display:block;font:inherit;text-align:left;cursor:pointer}
+.carte-banniere:not([data-lien]){cursor:default}
 .carte-avant-voile .produit-nom{font-size:15px;color:#fff}
 .carte-avant-atelier{font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .carte-avant-prix{margin-top:2px;font-size:14px;font-weight:750;color:var(--or-clair)}

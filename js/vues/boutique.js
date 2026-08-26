@@ -73,30 +73,60 @@ const VueBoutique = (() => {
     );
   }
 
+  /** Bannière du carrousel : image cliquable posée par le superadmin. */
+  function carteBanniere(b) {
+    return (
+      '<' + (b.lien ? "button type=\"button\"" : "span") +
+        ' class="carte-avant carte-banniere"' +
+        (b.lien ? ' data-lien="' + e(b.lien) + '"' : "") + ">" +
+        '<img src="' + b.image + '" alt="' + e(b.titre) + '" loading="lazy">' +
+        (b.titre
+          ? '<span class="carte-avant-voile"><span class="produit-nom">' + e(b.titre) + "</span></span>"
+          : "") +
+      "</" + (b.lien ? "button" : "span") + ">"
+    );
+  }
+
   async function accueil(vue) {
     const { produits, parId } = await chargerCatalogue();
+    let bannieres = [];
+    try {
+      bannieres = (await Api.lister("bannieres", "position", true)).filter((b) => b.active);
+    } catch (_) { /* base pas encore à jour : pas de bannière */ }
 
     UI.entete({ titre: "Atelier", sous: "Les réalisations de nos ateliers de couture" });
 
-    if (!produits.length) {
+    if (!produits.length && !bannieres.length) {
       vue.innerHTML = UI.vide("image", "Aucune réalisation publiée",
         "Les ateliers ajouteront bientôt leurs créations — revenez vite !");
       return;
     }
 
     const enAvant = produits.filter((p) => p.en_avant);
+    const carrousel = bannieres.map(carteBanniere)
+      .concat(enAvant.map((p) => carteAvant(p, parId[p.atelier_id])));
 
     vue.innerHTML =
-      (enAvant.length
+      (carrousel.length
         ? '<div class="titre-categorie" style="margin-top:0">★ À la une</div>' +
-          '<div class="carrousel" id="carrousel-avant">' +
-            enAvant.map((p) => carteAvant(p, parId[p.atelier_id])).join("") +
-          "</div>" +
-          '<div class="titre-categorie">Toutes les réalisations</div>'
+          '<div class="carrousel" id="carrousel-avant">' + carrousel.join("") + "</div>" +
+          (produits.length ? '<div class="titre-categorie">Toutes les réalisations</div>' : "")
         : "") +
-      '<div class="grille-produits">' +
-        produits.map((p) => carteProduit(p, parId[p.atelier_id])).join("") +
-      "</div>";
+      (produits.length
+        ? '<div class="grille-produits">' +
+            produits.map((p) => carteProduit(p, parId[p.atelier_id])).join("") +
+          "</div>"
+        : "");
+
+    /* Le lien s'ouvre dans le navigateur (window.open passe par le pont
+       Android, qui le confie au système). */
+    const zone = UI.$("#carrousel-avant");
+    if (zone) {
+      zone.addEventListener("click", (ev) => {
+        const banniere = ev.target.closest("[data-lien]");
+        if (banniere) window.open(banniere.dataset.lien, "_blank");
+      });
+    }
   }
 
   /* ---------- Fiche produit ---------- */

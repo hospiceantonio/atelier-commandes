@@ -407,6 +407,166 @@ const VueSuperAdmin = (() => {
     };
   }
 
+  /* ---------- Bannières du carrousel d'accueil ---------- */
+
+  /** Complète une adresse saisie sans protocole. */
+  function normaliserLien(lien) {
+    const l = (lien || "").trim();
+    if (!l) return "";
+    if (/^https?:\/\//i.test(l)) return l;
+    return "https://" + l.replace(/^\/+/, "");
+  }
+
+  async function bannieres(vue) {
+    const liste = await Api.lister("bannieres", "position", true);
+
+    UI.entete({
+      titre: "Bannières",
+      sous: liste.length + " bannière" + (liste.length > 1 ? "s" : "") + " sur l'accueil",
+      retour: true,
+      actions: '<a class="btn-ic" href="#/banniere/nouvelle" aria-label="Nouvelle bannière">' + UI.icone("plus") + "</a>",
+    });
+
+    if (!liste.length) {
+      vue.innerHTML = UI.vide("image", "Aucune bannière",
+        "Ajoutez une image cliquable en tête du carrousel de l'accueil : publicité, " +
+        "annonce, promotion d'un atelier…",
+        '<a class="btn" href="#/banniere/nouvelle">' + UI.icone("plus", "ic-sm") + "Nouvelle bannière</a>");
+      return;
+    }
+
+    vue.innerHTML =
+      '<div class="liste">' +
+      liste.map((b) =>
+        '<button type="button" class="ligne" data-nav="#/banniere/' + b.id + '">' +
+          '<span class="pastille"><img src="' + b.image + '" alt=""></span>' +
+          '<span class="ligne-corps">' +
+            '<span class="ligne-titre">' + e(b.titre || "Sans titre") + "</span>" +
+            '<span class="ligne-sous">' + e(b.lien || "Sans lien") + "</span>" +
+          "</span>" +
+          '<span class="ligne-fin">' +
+            (b.active
+              ? '<span class="badge badge-fait">Visible</span>'
+              : '<span class="badge badge-danger">Masquée</span>') +
+            '<span style="font-size:11.5px;color:var(--encre-tres-douce)">Position ' + b.position + "</span>" +
+          "</span>" +
+        "</button>"
+      ).join("") +
+      "</div>" +
+      '<p class="pied-note">Les bannières ouvrent le carrousel « À la une », avant les réalisations.</p>';
+  }
+
+  async function formulaireBanniere(vue, id) {
+    let banniere = null;
+    if (id) {
+      banniere = await Api.lireLigne("bannieres", id);
+      if (!banniere) { location.hash = "#/bannieres"; return; }
+    }
+    let imageDataUrl = banniere ? banniere.image : "";
+
+    UI.entete({
+      titre: banniere ? "Modifier la bannière" : "Nouvelle bannière",
+      sous: "Carrousel de l'accueil",
+      retour: true,
+    });
+
+    vue.innerHTML =
+      '<form id="form-banniere" novalidate>' +
+        '<div class="carte">' +
+          '<div class="carte-titre">' + UI.icone("image", "ic-sm") + "Image</div>" +
+          '<img id="ban-apercu" alt="" style="width:100%;aspect-ratio:4/3;object-fit:cover;' +
+            'border-radius:var(--r);background:var(--bleu-clair)"' +
+            (imageDataUrl ? ' src="' + imageDataUrl + '"' : " hidden") + ">" +
+          '<div class="btn-rangee" style="margin-top:10px">' +
+            '<button type="button" class="btn btn-clair" id="ban-choisir">' +
+              UI.icone("image", "ic-sm") + (imageDataUrl ? "Changer l'image" : "Choisir une image") + "</button>" +
+          "</div>" +
+          '<input type="file" id="ban-fichier" accept="image/*" hidden>' +
+          '<div class="aide">Format conseillé : paysage (4:3). L\'image est réduite automatiquement.</div>' +
+        "</div>" +
+
+        '<div class="carte">' +
+          '<div class="champ"><label for="ban-titre">Titre affiché</label>' +
+            '<input id="ban-titre" autocomplete="off" value="' + e(banniere ? banniere.titre : "") + '"></div>' +
+          '<div class="champ"><label for="ban-lien">Lien ouvert au clic</label>' +
+            '<input id="ban-lien" type="url" inputmode="url" autocomplete="off" spellcheck="false" ' +
+              'placeholder="https://exemple.com" value="' + e(banniere ? banniere.lien : "") + '">' +
+            '<div class="aide">Page web, lien WhatsApp (wa.me), réseau social… ' +
+              "Laissez vide pour une bannière sans clic.</div></div>" +
+          '<div class="champ"><label for="ban-position">Position</label>' +
+            '<input id="ban-position" inputmode="numeric" autocomplete="off" value="' +
+              e(String(banniere ? banniere.position : 0)) + '">' +
+            '<div class="aide">Les plus petits nombres passent en premier.</div></div>' +
+          '<label class="interrupteur" style="display:flex">' +
+            '<input type="checkbox" id="ban-active"' + (!banniere || banniere.active ? " checked" : "") + ">" +
+            "<span>Visible sur l'accueil</span>" +
+          "</label>" +
+        "</div>" +
+
+        '<button type="submit" class="btn btn-bloc" id="ban-enregistrer">' +
+          UI.icone("check", "ic-sm") + (banniere ? "Enregistrer" : "Publier la bannière") + "</button>" +
+      "</form>" +
+      (banniere
+        ? '<button type="button" class="btn btn-danger btn-bloc" id="ban-supprimer" style="margin-top:10px">' +
+            UI.icone("poubelle", "ic-sm") + "Supprimer cette bannière</button>"
+        : "");
+
+    const champ = UI.$("#ban-fichier");
+    const apercu = UI.$("#ban-apercu");
+    UI.$("#ban-choisir").onclick = () => champ.click();
+    champ.addEventListener("change", async () => {
+      const fichier = champ.files && champ.files[0];
+      champ.value = "";
+      if (!fichier) return;
+      try {
+        const { dataUrl } = await Utils.compresserImage(fichier, 1000, 0.82);
+        imageDataUrl = dataUrl;
+        apercu.src = dataUrl;
+        apercu.hidden = false;
+      } catch (_) {
+        UI.toast("Image illisible", "erreur");
+      }
+    });
+
+    UI.$("#form-banniere").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!imageDataUrl) { UI.toast("Choisissez une image", "erreur"); return; }
+      const bouton = UI.$("#ban-enregistrer");
+      bouton.disabled = true;
+      try {
+        const valeurs = {
+          titre: UI.$("#ban-titre").value.trim(),
+          image: imageDataUrl,
+          lien: normaliserLien(UI.$("#ban-lien").value),
+          position: Math.round(Utils.lireNombre(UI.$("#ban-position").value)),
+          active: UI.$("#ban-active").checked,
+        };
+        if (banniere) await Api.mettreAJour("bannieres", banniere.id, valeurs);
+        else await Api.inserer("bannieres", valeurs);
+        UI.toast(banniere ? "Bannière mise à jour" : "Bannière publiée", "ok");
+        location.hash = "#/bannieres";
+      } catch (err) {
+        UI.toast(err.message || "Enregistrement impossible", "erreur");
+        bouton.disabled = false;
+      }
+    });
+
+    const supprimer = UI.$("#ban-supprimer");
+    if (supprimer) {
+      supprimer.onclick = async () => {
+        const ok = await UI.confirmer({
+          titre: "Supprimer la bannière",
+          texte: "Elle disparaîtra du carrousel de l'accueil.",
+          bouton: "Supprimer", danger: true,
+        });
+        if (!ok) return;
+        await Api.supprimerLigne("bannieres", banniere.id);
+        UI.toast("Bannière supprimée", "ok");
+        location.hash = "#/bannieres";
+      };
+    }
+  }
+
   /* ---------- Compte superadmin ---------- */
 
   async function compte(vue) {
@@ -421,6 +581,16 @@ const VueSuperAdmin = (() => {
           '<div class="paire"><span class="l">Rôle</span><span class="v">Superadministrateur</span></div>' +
         "</div>" +
       "</div>" +
+
+      '<button type="button" class="carte" style="width:100%;text-align:left;display:flex;align-items:center;' +
+          'gap:12px;border:0;font:inherit;cursor:pointer" data-nav="#/bannieres">' +
+        '<span class="pastille">' + UI.icone("image", "ic-sm") + "</span>" +
+        '<span style="flex:1;min-width:0">' +
+          '<span class="ligne-titre">Bannières de l\'accueil</span>' +
+          '<span class="ligne-sous">Images cliquables en tête du carrousel</span>' +
+        "</span>" +
+        UI.icone("retour", "ic-sm") +
+      "</button>" +
 
       (prm
         ? '<form id="form-kkiapay">' +
@@ -482,5 +652,5 @@ const VueSuperAdmin = (() => {
     };
   }
 
-  return { liste, formulaire, fiche, compte };
+  return { liste, formulaire, fiche, compte, bannieres, formulaireBanniere };
 })();

@@ -518,6 +518,33 @@ create or replace view public.ateliers_publics as
 grant select on public.ateliers_publics to anon, authenticated;
 
 -- =========================================================
+-- Bannières du carrousel d'accueil (superadministrateur)
+-- =========================================================
+
+create table if not exists public.bannieres (
+  id       uuid primary key default gen_random_uuid(),
+  titre    text not null default '',
+  image    text not null,              -- image en data-url, compressée par l'application
+  lien     text not null default '',   -- ouvert au clic (http/https)
+  position integer not null default 0,
+  active   boolean not null default true,
+  cree_le  timestamptz not null default now()
+);
+
+alter table public.bannieres enable row level security;
+
+-- Le carrousel s'affiche sans compte : lecture publique des seules
+-- bannières actives.
+drop policy if exists bannieres_lecture on public.bannieres;
+create policy bannieres_lecture on public.bannieres for select to anon, authenticated
+  using (active or public.role_courant() = 'superadmin');
+
+drop policy if exists bannieres_gestion on public.bannieres;
+create policy bannieres_gestion on public.bannieres for all to authenticated
+  using (public.role_courant() = 'superadmin')
+  with check (public.role_courant() = 'superadmin');
+
+-- =========================================================
 -- Stock et ventes en boutique (factures)
 -- =========================================================
 
