@@ -10,6 +10,58 @@
 const VueBoutique = (() => {
   const e = Utils.echapper;
 
+  const DELAI_CARROUSEL = 4500;   // pause entre deux images
+  const PAUSE_APRES_GESTE = 8000; // le geste du visiteur reprend la main
+  let minuterieCarrousel = null;
+
+  /**
+   * Fait défiler le carrousel tout seul, et revient à la première image
+   * après la dernière. Toute manipulation du visiteur suspend le
+   * défilement quelques secondes : il n'est jamais bousculé.
+   */
+  function lancerDefilement(zone, points) {
+    if (minuterieCarrousel) clearInterval(minuterieCarrousel);
+    minuterieCarrousel = null;
+
+    const total = zone.children.length;
+    const majPoints = (index) => {
+      if (!points) return;
+      for (let i = 0; i < points.children.length; i++) {
+        points.children[i].classList.toggle("actif", i === index);
+      }
+    };
+    const pas = () => (total > 1
+      ? zone.children[1].offsetLeft - zone.children[0].offsetLeft
+      : zone.clientWidth) || zone.clientWidth;
+    const indexCourant = () => Math.round(zone.scrollLeft / pas());
+
+    zone.addEventListener("scroll", () => majPoints(indexCourant()), { passive: true });
+    majPoints(0);
+
+    if (total < 2) return;
+    // Respecte le réglage système « animations réduites ».
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let reprise = 0;
+    const suspendre = () => { reprise = Date.now() + PAUSE_APRES_GESTE; };
+    for (const geste of ["pointerdown", "touchstart", "wheel"]) {
+      zone.addEventListener(geste, suspendre, { passive: true });
+    }
+
+    minuterieCarrousel = setInterval(() => {
+      // La vue a changé : la minuterie n'a plus lieu d'être.
+      if (!document.body.contains(zone)) {
+        clearInterval(minuterieCarrousel);
+        minuterieCarrousel = null;
+        return;
+      }
+      if (document.hidden || Date.now() < reprise) return;
+      const suivant = (indexCourant() + 1) % total;
+      zone.scrollTo({ left: suivant * pas(), behavior: "smooth" });
+      majPoints(suivant);
+    }, DELAI_CARROUSEL);
+  }
+
   const fmtPrix = (p, atelier) =>
     Utils.fmtMontant(p.prix, (atelier && atelier.devise) || "FCFA");
 
@@ -110,6 +162,11 @@ const VueBoutique = (() => {
       (carrousel.length
         ? '<div class="titre-categorie" style="margin-top:0">★ À la une</div>' +
           '<div class="carrousel" id="carrousel-avant">' + carrousel.join("") + "</div>" +
+          (carrousel.length > 1
+            ? '<div class="carrousel-points" id="carrousel-points" aria-hidden="true">' +
+                carrousel.map(() => '<span class="carrousel-point"></span>').join("") +
+              "</div>"
+            : "") +
           (produits.length ? '<div class="titre-categorie">Toutes les réalisations</div>' : "")
         : "") +
       (produits.length
@@ -126,6 +183,7 @@ const VueBoutique = (() => {
         const banniere = ev.target.closest("[data-lien]");
         if (banniere) window.open(banniere.dataset.lien, "_blank");
       });
+      lancerDefilement(zone, UI.$("#carrousel-points"));
     }
   }
 

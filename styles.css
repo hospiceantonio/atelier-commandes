@@ -440,7 +440,7 @@ details.bloc > .contenu{padding:0 14px 14px}
 }
 .carrousel::-webkit-scrollbar{display:none}
 .carte-avant{
-  position:relative;flex:0 0 78%;scroll-snap-align:center;
+  position:relative;flex:0 0 100%;scroll-snap-align:center;
   aspect-ratio:4/3;border-radius:var(--r);overflow:hidden;color:#fff;
   background:var(--bleu-clair);box-shadow:var(--ombre);
 }
@@ -454,6 +454,13 @@ details.bloc > .contenu{padding:0 14px 14px}
   padding:26px 14px 12px;
   background:linear-gradient(to top,rgba(10,11,32,.88),rgba(10,11,32,0));
 }
+/* Pastilles de position sous le carrousel. */
+.carrousel-points{display:flex;justify-content:center;gap:6px;margin-top:8px}
+.carrousel-point{
+  width:6px;height:6px;border-radius:50%;background:var(--trait);transition:width .25s,background .25s;
+}
+.carrousel-point.actif{width:18px;background:var(--indigo-700)}
+
 .carte-banniere{border:0;padding:0;display:block;font:inherit;text-align:left;cursor:pointer}
 .carte-banniere:not([data-lien]){cursor:default}
 .carte-avant-voile .produit-nom{font-size:15px;color:#fff}
