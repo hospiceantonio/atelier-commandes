@@ -116,7 +116,7 @@ const VueStats = (() => {
           '<p style="margin:0;flex:1;font-size:12.5px;color:var(--encre-tres-douce)">' +
             e(libellePeriode(periodeActive, b)) + "</p>" +
           '<button type="button" class="btn btn-clair btn-sm" id="btn-point">' +
-            UI.icone("telecharger", "ic-sm") + "Point A4</button>" +
+            UI.icone("telecharger", "ic-sm") + "Récap A4</button>" +
         "</div>" +
 
         '<div class="tuiles">' +
@@ -209,7 +209,7 @@ const VueStats = (() => {
 
       /* Ajout d'une dépense */
       UI.$("#btn-point").onclick = () => {
-        choisirImpression("Point de caisse — " + libellePeriode(periodeActive, b),
+        choisirImpression("Récapitulatif — " + libellePeriode(periodeActive, b),
           () => Store.imprimerRapport(stats, b, libellePeriode(periodeActive, b)));
       };
 

@@ -437,7 +437,7 @@ const Store = (() => {
 
     return (
       "<!DOCTYPE html><html lang='fr'><head><meta charset='utf-8'>" +
-      "<title>Point " + e(libelle) + "</title><style>" +
+      "<title>Récapitulatif " + e(libelle) + "</title><style>" +
       "@page{size:A4;margin:15mm}" +
       "*{box-sizing:border-box}" +
       "body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;color:#141636;font-size:11pt;line-height:1.45}" +
@@ -447,11 +447,13 @@ const Store = (() => {
       ".atelier p{margin:1mm 0;font-size:10pt;color:#5b5f7d}" +
       ".titre{text-align:right}.titre h2{margin:0;font-size:14pt;letter-spacing:1px}" +
       ".titre p{margin:1mm 0;font-size:10pt;color:#5b5f7d}" +
-      ".resume{display:flex;gap:4mm;margin:7mm 0}" +
+      ".resume{display:flex;gap:3.5mm;margin:6mm 0 0}" +
+      ".resume.petit .v{font-size:12.5pt}" +
       ".case{flex:1;border:1px solid #e3e5f0;border-radius:2mm;padding:3.5mm}" +
       ".case .l{font-size:9pt;text-transform:uppercase;letter-spacing:.8px;color:#5b5f7d}" +
       ".case .v{font-size:15pt;font-weight:750;margin-top:1mm}" +
-      "h3{margin:7mm 0 2mm;font-size:11pt;color:#2E3192;text-transform:uppercase;letter-spacing:.8px}" +
+      ".case .n{font-size:8.5pt;color:#8b8fa8;margin-top:.5mm}" +
+      "h3{margin:8mm 0 2mm;font-size:11pt;color:#2E3192;text-transform:uppercase;letter-spacing:.8px}" +
       "table{width:100%;border-collapse:collapse}" +
       "th{text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#5b5f7d;" +
         "border-bottom:1.5px solid #2E3192;padding:2mm}" +
@@ -469,18 +471,34 @@ const Store = (() => {
         "<div class='atelier'><h1>" + e(r.nomAtelier) + "</h1>" +
           (r.slogan ? "<p>" + e(r.slogan) + "</p>" : "") +
           (contacts ? "<p>" + e(contacts) + "</p>" : "") + "</div>" +
-        "<div class='titre'><h2>POINT DE CAISSE</h2>" +
+        "<div class='titre'><h2>RÉCAPITULATIF DE PÉRIODE</h2>" +
           "<p>" + e(libelle) + "</p>" +
           "<p>Édité le " + e(Utils.fmtDate(Utils.aujourdhui())) + "</p></div>" +
       "</div>" +
 
       "<div class='resume'>" +
         "<div class='case'><div class='l'>Recettes</div><div class='v' style='color:#0F9D58'>" +
-          m(stats.recettes) + "</div></div>" +
+          m(stats.recettes) + "</div><div class='n'>" + stats.nbPaiements + " versement" +
+          (stats.nbPaiements > 1 ? "s" : "") + "</div></div>" +
         "<div class='case'><div class='l'>Dépenses</div><div class='v' style='color:#D33A2C'>" +
-          m(stats.totalDepenses) + "</div></div>" +
+          m(stats.totalDepenses) + "</div><div class='n'>" + stats.depenses.length + " dépense" +
+          (stats.depenses.length > 1 ? "s" : "") + "</div></div>" +
         "<div class='case'><div class='l'>Bénéfice</div><div class='v' style='color:" +
-          (stats.benefice >= 0 ? "#0F9D58" : "#D33A2C") + "'>" + m(stats.benefice) + "</div></div>" +
+          (stats.benefice >= 0 ? "#0F9D58" : "#D33A2C") + "'>" + m(stats.benefice) +
+          "</div><div class='n'>recettes − dépenses</div></div>" +
+      "</div>" +
+
+      "<div class='resume petit'>" +
+        "<div class='case'><div class='l'>Commandes créées</div><div class='v'>" +
+          stats.commandesCreees + "</div><div class='n'>" + m(stats.montantCommandes) + " au total</div></div>" +
+        "<div class='case'><div class='l'>Commandes livrées</div><div class='v'>" +
+          stats.commandesLivrees + "</div><div class='n'>sur la période</div></div>" +
+        "<div class='case'><div class='l'>Ventes boutique</div><div class='v'>" +
+          m(stats.totalVentes) + "</div><div class='n'>" + stats.ventes.length + " facture" +
+          (stats.ventes.length > 1 ? "s" : "") + " · " + stats.articlesVendus + " article" +
+          (stats.articlesVendus > 1 ? "s" : "") + "</div></div>" +
+        "<div class='case'><div class='l'>Reste à encaisser</div><div class='v' style='color:#D33A2C'>" +
+          m(stats.soldesOuverts) + "</div><div class='n'>commandes et ventes non soldées</div></div>" +
       "</div>" +
 
       "<h3>Encaissements (" + stats.paiements.length + ")</h3>" +
@@ -505,14 +523,14 @@ const Store = (() => {
           "</tbody></table>"
         : "<p class='vide'>Aucune dépense sur la période.</p>") +
 
-      "<div class='pied'><span>" + e(r.nomAtelier) + " — point de caisse</span>" +
+      "<div class='pied'><span>" + e(r.nomAtelier) + " — récapitulatif de période</span>" +
         "<span>Bénéfice de la période : <b>" + m(stats.benefice) + "</b></span></div>" +
       "</body></html>"
     );
   }
 
   const imprimerRapport = (stats, bornes, libelle) =>
-    Utils.imprimerA4("Point de caisse", rapportA4(stats, bornes, libelle));
+    Utils.imprimerA4("Récapitulatif de période", rapportA4(stats, bornes, libelle));
 
   /** Journal A4 de tous les versements de la période, du plus récent au plus ancien. */
   function journalA4(stats, libelle, nomParClient) {
