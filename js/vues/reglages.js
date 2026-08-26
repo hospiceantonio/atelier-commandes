@@ -59,9 +59,9 @@ const VueReglages = (() => {
           '<div class="champ"><label for="perso-slogan">Slogan</label>' +
             '<input id="perso-slogan" autocomplete="off" value="' + e(r.slogan) + '"></div>' +
           '<div class="champ-duo">' +
-            '<div class="champ"><label for="perso-wa">N° WhatsApp de l\'atelier</label>' +
+            '<div class="champ"><label for="perso-wa">N° WhatsApp</label>' +
               '<input id="perso-wa" type="tel" inputmode="tel" autocomplete="off" value="' + e(r.telWhatsAppAtelier) + '"></div>' +
-            '<div class="champ"><label for="perso-appel">N° d\'appel de l\'atelier</label>' +
+            '<div class="champ"><label for="perso-appel">N° d\'appel</label>' +
               '<input id="perso-appel" type="tel" inputmode="tel" autocomplete="off" value="' + e(r.telAppelAtelier) + '"></div>' +
           "</div>" +
         "</div>" +
