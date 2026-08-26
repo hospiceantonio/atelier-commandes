@@ -357,9 +357,19 @@ const VueSuperAdmin = (() => {
 
     UI.$("#fa-prolonger").onclick = async () => {
       const base = Math.max(Date.now(), finAbonnement(atelier));
-      await Api.mettreAJour("ateliers", id, {
-        abonnement_fin: new Date(base + 31 * 86400000).toISOString(),
-      });
+      const nouvelleFin = new Date(base + 31 * 86400000).toISOString();
+      await Api.mettreAJour("ateliers", id, { abonnement_fin: nouvelleFin });
+      // Trace du renouvellement encaissé hors ligne, pour l'historique.
+      try {
+        await Api.inserer("paiements_abonnement", {
+          atelier_id: id,
+          reference: "manuel:" + Utils.uid("r"),
+          montant: atelier.abonnement_mensuel,
+          mois: 1,
+          fin_avant: atelier.abonnement_fin,
+          fin_apres: nouvelleFin,
+        });
+      } catch (_) { /* base pas encore à jour : l'abonnement est prolongé malgré tout */ }
       UI.toast("Abonnement prolongé d'un mois", "ok");
       recharger();
     };
@@ -405,6 +415,95 @@ const VueSuperAdmin = (() => {
       UI.toast("Atelier supprimé", "ok");
       location.hash = "#/";
     };
+  }
+
+  /* ---------- Historique des renouvellements ---------- */
+
+  const estMobileMoney = (p) => String(p.reference || "").startsWith("kkiapay:");
+
+  async function paiements(vue) {
+    const [liste, ateliers] = await Promise.all([
+      Api.lister("paiements_abonnement", "cree_le", false),
+      Api.lister("ateliers"),
+    ]);
+    const parId = {};
+    for (const a of ateliers) parId[a.id] = a;
+
+    const devise = (ateliers[0] && ateliers[0].devise) || "FCFA";
+    const total = liste.reduce((s, p) => s + (Number(p.montant) || 0), 0);
+    const debutMois = new Date();
+    debutMois.setDate(1);
+    debutMois.setHours(0, 0, 0, 0);
+    const ceMois = liste.filter((p) => new Date(p.cree_le) >= debutMois);
+    const totalMois = ceMois.reduce((s, p) => s + (Number(p.montant) || 0), 0);
+    const enLigne = liste.filter(estMobileMoney);
+
+    UI.entete({
+      titre: "Renouvellements",
+      sous: liste.length + " paiement" + (liste.length > 1 ? "s" : "") + " enregistré" + (liste.length > 1 ? "s" : ""),
+      retour: true,
+    });
+
+    if (!liste.length) {
+      vue.innerHTML = UI.vide("argent", "Aucun renouvellement",
+        "Les paiements Mobile Money de vos ateliers et vos renouvellements « + 1 mois » " +
+        "apparaîtront ici, avec les totaux.");
+      return;
+    }
+
+    /* Regroupement par mois, du plus récent au plus ancien. */
+    const parMois = {};
+    for (const p of liste) {
+      const d = new Date(p.cree_le);
+      const cle = d.getFullYear() + "-" + Utils.pad(d.getMonth() + 1);
+      (parMois[cle] = parMois[cle] || []).push(p);
+    }
+
+    vue.innerHTML =
+      '<div class="tuiles">' +
+        '<div class="tuile tuile-vert"><div class="tuile-label">' + UI.icone("argent", "ic-sm") + "Ce mois-ci</div>" +
+          '<div class="tuile-valeur">' + Utils.fmtMontant(totalMois, devise) + "</div>" +
+          '<div class="tuile-note">' + ceMois.length + " renouvellement" + (ceMois.length > 1 ? "s" : "") + "</div></div>" +
+        '<div class="tuile"><div class="tuile-label">' + UI.icone("stats", "ic-sm") + "Total encaissé</div>" +
+          '<div class="tuile-valeur">' + Utils.fmtMontant(total, devise) + "</div>" +
+          '<div class="tuile-note">depuis le début</div></div>' +
+        '<div class="tuile"><div class="tuile-label">' + UI.icone("tel", "ic-sm") + "Mobile Money</div>" +
+          '<div class="tuile-valeur">' + enLigne.length + "</div>" +
+          '<div class="tuile-note">sur ' + liste.length + " paiement" + (liste.length > 1 ? "s" : "") + "</div></div>" +
+        '<div class="tuile"><div class="tuile-label">' + UI.icone("clients", "ic-sm") + "Ateliers payants</div>" +
+          '<div class="tuile-valeur">' + new Set(liste.map((p) => p.atelier_id)).size + "</div>" +
+          '<div class="tuile-note">ont renouvelé au moins une fois</div></div>' +
+      "</div>" +
+
+      Object.keys(parMois).sort().reverse().map((cle) => {
+        const [annee, mois] = cle.split("-");
+        const somme = parMois[cle].reduce((s, p) => s + (Number(p.montant) || 0), 0);
+        return (
+          '<div class="section-titre">' +
+            e(Utils.MOIS[Number(mois) - 1] + " " + annee) +
+            '<span class="lien">' + Utils.fmtMontant(somme, devise) + "</span>" +
+          "</div>" +
+          '<div class="carte"><div class="mini-liste">' +
+          parMois[cle].map((p) => {
+            const atelier = parId[p.atelier_id];
+            return (
+              '<div class="mini">' +
+                '<span class="l"><strong>' + e(atelier ? atelier.nom : "Atelier supprimé") + "</strong>" +
+                  '<br><span style="color:var(--encre-tres-douce);font-size:12px">' +
+                    Utils.fmtDateHeure(p.cree_le) + " · " +
+                    (estMobileMoney(p) ? "Mobile Money / carte" : "Encaissé par vous") +
+                    (p.mois > 1 ? " · " + p.mois + " mois" : "") +
+                  "</span></span>" +
+                '<span class="v" style="color:var(--vert)">+' +
+                  Utils.fmtMontant(p.montant, (atelier && atelier.devise) || devise) + "</span>" +
+              "</div>"
+            );
+          }).join("") +
+          "</div></div>"
+        );
+      }).join("") +
+      '<p class="pied-note">Les paiements Mobile Money sont inscrits par le serveur ; ' +
+        "les renouvellements « + 1 mois » sont ceux que vous encaissez vous-même.</p>";
   }
 
   /* ---------- Bannières du carrousel d'accueil ---------- */
@@ -583,6 +682,16 @@ const VueSuperAdmin = (() => {
       "</div>" +
 
       '<button type="button" class="carte" style="width:100%;text-align:left;display:flex;align-items:center;' +
+          'gap:12px;border:0;font:inherit;cursor:pointer" data-nav="#/paiements">' +
+        '<span class="pastille">' + UI.icone("argent", "ic-sm") + "</span>" +
+        '<span style="flex:1;min-width:0">' +
+          '<span class="ligne-titre">Renouvellements</span>' +
+          '<span class="ligne-sous">Historique des paiements de vos ateliers</span>' +
+        "</span>" +
+        UI.icone("retour", "ic-sm") +
+      "</button>" +
+
+      '<button type="button" class="carte" style="width:100%;text-align:left;display:flex;align-items:center;' +
           'gap:12px;border:0;font:inherit;cursor:pointer" data-nav="#/bannieres">' +
         '<span class="pastille">' + UI.icone("image", "ic-sm") + "</span>" +
         '<span style="flex:1;min-width:0">' +
@@ -652,5 +761,5 @@ const VueSuperAdmin = (() => {
     };
   }
 
-  return { liste, formulaire, fiche, compte, bannieres, formulaireBanniere };
+  return { liste, formulaire, fiche, compte, paiements, bannieres, formulaireBanniere };
 })();

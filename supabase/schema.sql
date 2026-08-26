@@ -394,6 +394,16 @@ drop policy if exists paiements_lecture on public.paiements_abonnement;
 create policy paiements_lecture on public.paiements_abonnement for select to authenticated
   using (public.role_courant() = 'superadmin' or atelier_id = public.atelier_courant());
 
+-- Le superadmin inscrit lui-même les renouvellements encaissés hors
+-- ligne (espèces, virement) : l'historique reste ainsi complet.
+drop policy if exists paiements_creation on public.paiements_abonnement;
+create policy paiements_creation on public.paiements_abonnement for insert to authenticated
+  with check (public.role_courant() = 'superadmin');
+
+drop policy if exists paiements_suppression on public.paiements_abonnement;
+create policy paiements_suppression on public.paiements_abonnement for delete to authenticated
+  using (public.role_courant() = 'superadmin');
+
 -- Crédit idempotent : appelée uniquement par le webhook, avec le montant
 -- annoncé par KKiaPay (jamais celui demandé par l'application). KKiaPay
 -- rejoue sa notification jusqu'à 5 fois : la référence unique garantit
