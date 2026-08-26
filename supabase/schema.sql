@@ -575,10 +575,12 @@ create policy codes_superadmin on public.codes_abonnement for all to authenticat
 -- Génération d'un lot. Chaque code vaut un mois. Alphabet sans
 -- caractères ambigus (ni 0/O ni 1/I), tirage cryptographique,
 -- format ABCD-EFGH-JKLM.
+-- search_path inclut « extensions » : Supabase y installe pgcrypto,
+-- d'où vient gen_random_bytes. Sans cela la fonction est introuvable.
 create or replace function public.generer_codes(
   p_nombre integer, p_lot text default ''
 ) returns setof public.codes_abonnement
-language plpgsql security definer set search_path = public as
+language plpgsql security definer set search_path = public, extensions as
 $$
 declare
   alphabet constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
