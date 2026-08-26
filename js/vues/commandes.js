@@ -384,7 +384,9 @@ const VueCommandes = (() => {
       titre: commande.numero,
       sous: "Créée le " + Utils.fmtDateHeure(commande.creeLe),
       retour: true,
-      actions: '<a class="btn-ic" href="#/commande/' + id + '/modifier" aria-label="Modifier">' + UI.icone("crayon") + "</a>",
+      actions: Api.estAdmin()
+        ? '<a class="btn-ic" href="#/commande/' + id + '/modifier" aria-label="Modifier">' + UI.icone("crayon") + "</a>"
+        : "",
     });
 
     let html =
@@ -440,7 +442,8 @@ const VueCommandes = (() => {
     html +=
       '<div class="carte">' +
         '<div class="carte-titre">' + UI.icone("argent", "ic-sm") + "Paiement" +
-          (solde > 0 ? '<a class="lien" id="ouvrir-paiement" style="cursor:pointer">+ Encaisser</a>' : "") +
+          (solde > 0 && Api.estAdmin()
+            ? '<a class="lien" id="ouvrir-paiement" style="cursor:pointer">+ Encaisser</a>' : "") +
         "</div>" +
         '<div class="paires">' +
           '<div class="paire"><span class="l">Montant de la commande</span><span class="v gros">' + Utils.fmtMontant(commande.montant, r.devise) + "</span></div>" +
@@ -458,24 +461,28 @@ const VueCommandes = (() => {
                 '<div class="mini">' +
                   '<span class="l">' + e(p.note || "Versement") + " · " + Utils.fmtDateHeure(p.date) + "</span>" +
                   '<span class="v">' + Utils.fmtMontant(p.montant, r.devise) + "</span>" +
-                  '<button type="button" class="btn-ic" style="width:30px;height:30px;background:var(--rouge-clair);color:var(--rouge)" data-suppr-paiement="' + p.id + '" aria-label="Annuler ce versement">' +
-                    UI.icone("poubelle", "ic-sm") + "</button>" +
+                  (Api.estAdmin()
+                    ? '<button type="button" class="btn-ic" style="width:30px;height:30px;background:var(--rouge-clair);color:var(--rouge)" data-suppr-paiement="' + p.id + '" aria-label="Annuler ce versement">' +
+                      UI.icone("poubelle", "ic-sm") + "</button>"
+                    : "") +
                 "</div>"
               ).join("") +
             "</div></div></details>"
           : "") +
       "</div>";
 
-    /* Statut */
+    /* Statut : seul l'administrateur le change ; le modérateur le lit. */
     html +=
       '<div class="carte">' +
         '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Statut</div>" +
-        '<div class="btn-rangee">' +
-          Object.entries(Store.STATUTS).map(([code, s]) =>
-            '<button type="button" class="btn btn-sm ' + (commande.statut === code ? "" : "btn-clair") + '" data-statut="' + code + '">' +
-              e(s.label) + "</button>"
-          ).join("") +
-        "</div>" +
+        (Api.estAdmin()
+          ? '<div class="btn-rangee">' +
+              Object.entries(Store.STATUTS).map(([code, s]) =>
+                '<button type="button" class="btn btn-sm ' + (commande.statut === code ? "" : "btn-clair") + '" data-statut="' + code + '">' +
+                  e(s.label) + "</button>"
+              ).join("") +
+            "</div>"
+          : UI.badgeStatut(commande)) +
         (commande.statut === "pret" && solde > 0
           ? '<div class="aide" style="margin-top:8px">Astuce : prévenez le client par WhatsApp que sa commande est prête.</div>'
           : "") +
@@ -494,9 +501,11 @@ const VueCommandes = (() => {
         "</div>";
     }
 
-    html +=
-      '<div style="margin-top:6px"><button type="button" class="btn btn-danger btn-bloc" id="suppr-cmd">' +
-        UI.icone("poubelle", "ic-sm") + "Supprimer la commande</button></div>";
+    if (Api.estAdmin()) {
+      html +=
+        '<div style="margin-top:6px"><button type="button" class="btn btn-danger btn-bloc" id="suppr-cmd">' +
+          UI.icone("poubelle", "ic-sm") + "Supprimer la commande</button></div>";
+    }
 
     vue.innerHTML = html;
 
@@ -601,7 +610,8 @@ const VueCommandes = (() => {
       window.open(Utils.lienWhatsApp(Utils.telWhatsApp(client), message, r.indicatif), "_blank");
     };
 
-    UI.$("#suppr-cmd").onclick = async () => {
+    const supprCmd = UI.$("#suppr-cmd");
+    if (supprCmd) supprCmd.onclick = async () => {
       const ok = await UI.confirmer({
         titre: "Supprimer la commande",
         texte: "La commande " + commande.numero + ", ses photos et ses versements seront définitivement effacés.",

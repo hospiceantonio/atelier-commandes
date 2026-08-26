@@ -35,7 +35,7 @@ create table if not exists public.ateliers (
 create table if not exists public.profils (
   id           uuid primary key references auth.users (id) on delete cascade,
   email        text not null default '',
-  role         text not null default 'admin' check (role in ('superadmin', 'admin')),
+  role         text not null default 'admin' check (role in ('superadmin', 'admin', 'moderateur')),
   atelier_id   uuid references public.ateliers (id) on delete set null,
   nom_complet  text not null default '',
   telephone    text not null default '',
@@ -113,6 +113,12 @@ create or replace function public.atelier_courant()
 returns uuid language sql stable security definer set search_path = public as
 $$ select atelier_id from public.profils where id = auth.uid() $$;
 
+-- Vrai pour l'administrateur d'un atelier : lui seul modifie et supprime.
+-- Un modérateur crée et consulte, mais ne défait rien.
+create or replace function public.est_admin()
+returns boolean language sql stable security definer set search_path = public as
+$$ select coalesce(public.role_courant() = 'admin', false) $$;
+
 -- ---------- Nouveaux comptes : profil créé automatiquement ----------
 -- Tout compte auto-inscrit naît « admin sans atelier » : inutilisable tant
 -- que le superadmin ne l'a pas relié à un atelier.
@@ -144,13 +150,33 @@ create trigger sur_nouvel_utilisateur
 create or replace function public.proteger_profil()
 returns trigger language plpgsql security definer set search_path = public as
 $$
+declare
+  r text;
 begin
   -- auth.uid() est nul hors application (éditeur SQL, service_role) :
   -- ces contextes de confiance ne sont pas bridés.
-  if auth.uid() is not null and public.role_courant() is distinct from 'superadmin' then
-    new.role := old.role;
-    new.atelier_id := old.atelier_id;
+  if auth.uid() is null then
+    return new;
   end if;
+  r := public.role_courant();
+  if r = 'superadmin' then
+    return new;
+  end if;
+
+  -- Un administrateur gère les modérateurs de SON atelier, et rien d'autre :
+  -- il ne peut créer ni promouvoir un administrateur, ni toucher un compte
+  -- déjà rattaché à un autre atelier, ni se modifier lui-même.
+  if r = 'admin'
+     and old.id <> auth.uid()
+     and new.role = 'moderateur'
+     and new.atelier_id = public.atelier_courant()
+     and (old.atelier_id = public.atelier_courant()
+          or (old.atelier_id is null and old.cree_le > now() - interval '1 hour')) then
+    return new;
+  end if;
+
+  new.role := old.role;
+  new.atelier_id := old.atelier_id;
   return new;
 end
 $$;
@@ -249,37 +275,75 @@ create policy ateliers_suppression on public.ateliers for delete to authenticate
 
 drop policy if exists profils_lecture on public.profils;
 create policy profils_lecture on public.profils for select to authenticated
-  using (public.role_courant() = 'superadmin' or id = auth.uid());
+  using (public.role_courant() = 'superadmin'
+         or id = auth.uid()
+         or (public.est_admin() and atelier_id = public.atelier_courant()));
 
 drop policy if exists profils_modification on public.profils;
 create policy profils_modification on public.profils for update to authenticated
-  using (public.role_courant() = 'superadmin' or id = auth.uid());
+  using (public.role_courant() = 'superadmin'
+         or id = auth.uid()
+         or (public.est_admin()
+             and (atelier_id = public.atelier_courant()
+                  -- compte tout juste créé par l'administrateur, pas encore rattaché
+                  or (atelier_id is null and cree_le > now() - interval '1 hour'))));
 
 drop policy if exists profils_suppression on public.profils;
 create policy profils_suppression on public.profils for delete to authenticated
-  using (public.role_courant() = 'superadmin');
+  using (public.role_courant() = 'superadmin'
+         or (public.est_admin() and atelier_id = public.atelier_courant() and role = 'moderateur'));
 
 -- Données métier : chaque atelier ne voit et ne touche que les siennes.
+-- Dans un atelier, le modérateur crée et consulte ; seul l'administrateur
+-- modifie et supprime. Ces règles sont posées côté serveur : masquer les
+-- boutons dans l'application ne suffirait pas.
 
 drop policy if exists clients_par_atelier on public.clients;
-create policy clients_par_atelier on public.clients for all to authenticated
+drop policy if exists clients_lecture on public.clients;
+create policy clients_lecture on public.clients for select to authenticated
+  using (atelier_id = public.atelier_courant());
+drop policy if exists clients_creation on public.clients;
+create policy clients_creation on public.clients for insert to authenticated
+  with check (atelier_id = public.atelier_courant());
+drop policy if exists clients_modification on public.clients;
+create policy clients_modification on public.clients for update to authenticated
   using (atelier_id = public.atelier_courant())
   with check (atelier_id = public.atelier_courant());
+drop policy if exists clients_suppression on public.clients;
+create policy clients_suppression on public.clients for delete to authenticated
+  using (atelier_id = public.atelier_courant() and public.est_admin());
 
 drop policy if exists commandes_par_atelier on public.commandes;
-create policy commandes_par_atelier on public.commandes for all to authenticated
-  using (atelier_id = public.atelier_courant())
+drop policy if exists commandes_lecture on public.commandes;
+create policy commandes_lecture on public.commandes for select to authenticated
+  using (atelier_id = public.atelier_courant());
+drop policy if exists commandes_creation on public.commandes;
+create policy commandes_creation on public.commandes for insert to authenticated
   with check (atelier_id = public.atelier_courant());
+drop policy if exists commandes_modification on public.commandes;
+create policy commandes_modification on public.commandes for update to authenticated
+  using (atelier_id = public.atelier_courant() and public.est_admin())
+  with check (atelier_id = public.atelier_courant());
+drop policy if exists commandes_suppression on public.commandes;
+create policy commandes_suppression on public.commandes for delete to authenticated
+  using (atelier_id = public.atelier_courant() and public.est_admin());
 
 drop policy if exists photos_par_atelier on public.photos;
-create policy photos_par_atelier on public.photos for all to authenticated
-  using (atelier_id = public.atelier_courant())
+drop policy if exists photos_lecture on public.photos;
+create policy photos_lecture on public.photos for select to authenticated
+  using (atelier_id = public.atelier_courant());
+drop policy if exists photos_creation on public.photos;
+create policy photos_creation on public.photos for insert to authenticated
   with check (atelier_id = public.atelier_courant());
+drop policy if exists photos_suppression on public.photos;
+create policy photos_suppression on public.photos for delete to authenticated
+  using (atelier_id = public.atelier_courant() and public.est_admin());
 
+-- Les dépenses relèvent de la gestion : administrateur seulement.
 drop policy if exists depenses_par_atelier on public.depenses;
 create policy depenses_par_atelier on public.depenses for all to authenticated
-  using (atelier_id = public.atelier_courant())
-  with check (atelier_id = public.atelier_courant());
+  using (atelier_id = public.atelier_courant() and public.est_admin())
+  with check (atelier_id = public.atelier_courant() and public.est_admin());
 
 -- =========================================================
 -- Paiement de l'abonnement par KKiaPay
@@ -426,10 +490,11 @@ create policy produits_lecture_publique on public.produits for select to anon, a
          or atelier_id = public.atelier_courant()
          or public.role_courant() = 'superadmin');
 
+-- La vitrine (et donc le stock) est tenue par l'administrateur.
 drop policy if exists produits_gestion on public.produits;
 create policy produits_gestion on public.produits for all to authenticated
-  using (atelier_id = public.atelier_courant())
-  with check (atelier_id = public.atelier_courant());
+  using (atelier_id = public.atelier_courant() and public.est_admin())
+  with check (atelier_id = public.atelier_courant() and public.est_admin());
 
 drop policy if exists photos_produits_lecture_publique on public.photos_produits;
 create policy photos_produits_lecture_publique on public.photos_produits for select to anon, authenticated
@@ -439,8 +504,8 @@ create policy photos_produits_lecture_publique on public.photos_produits for sel
 
 drop policy if exists photos_produits_gestion on public.photos_produits;
 create policy photos_produits_gestion on public.photos_produits for all to authenticated
-  using (atelier_id = public.atelier_courant())
-  with check (atelier_id = public.atelier_courant());
+  using (atelier_id = public.atelier_courant() and public.est_admin())
+  with check (atelier_id = public.atelier_courant() and public.est_admin());
 
 -- Vue publique des ateliers actifs : uniquement les colonnes vitrines
 -- (jamais l'abonnement). La vue appartient à postgres et ignore le RLS
@@ -460,12 +525,14 @@ grant select on public.ateliers_publics to anon, authenticated;
 alter table public.produits add column if not exists stock integer not null default 0;
 
 alter table public.compteurs add column if not exists prochaine_facture integer not null default 1;
+alter table public.ventes add column if not exists client_whatsapp text not null default '';
 
 create table if not exists public.ventes (
   id         uuid primary key default gen_random_uuid(),
   atelier_id uuid not null references public.ateliers (id) on delete cascade,
   numero     text not null,
   client     text not null default '',
+  client_whatsapp text not null default '',
   lignes     jsonb not null default '[]',  -- [{produit_id, nom, code, prix, quantite}]
   total      numeric not null default 0,
   paye       numeric not null default 0,
@@ -477,16 +544,24 @@ create index if not exists ventes_par_atelier on public.ventes (atelier_id);
 
 alter table public.ventes enable row level security;
 
+-- Les ventes sont créées par la fonction enregistrer_vente (security
+-- definer) : administrateur comme modérateur peuvent vendre. Mais seul
+-- l'administrateur annule une vente.
 drop policy if exists ventes_par_atelier on public.ventes;
-create policy ventes_par_atelier on public.ventes for all to authenticated
-  using (atelier_id = public.atelier_courant())
-  with check (atelier_id = public.atelier_courant());
+drop policy if exists ventes_lecture on public.ventes;
+create policy ventes_lecture on public.ventes for select to authenticated
+  using (atelier_id = public.atelier_courant());
+drop policy if exists ventes_suppression on public.ventes;
+create policy ventes_suppression on public.ventes for delete to authenticated
+  using (atelier_id = public.atelier_courant() and public.est_admin());
 
 -- Vente atomique : vérifie le stock, décrémente, numérote et facture.
 -- Tout se fait dans une seule transaction : deux ventes simultanées ne
 -- peuvent pas vendre deux fois le dernier article (verrou for update).
+drop function if exists public.enregistrer_vente(text, jsonb, numeric, text);
 create or replace function public.enregistrer_vente(
-  p_client text, p_lignes jsonb, p_paye numeric, p_note text default ''
+  p_client text, p_lignes jsonb, p_paye numeric, p_note text default '',
+  p_client_whatsapp text default ''
 ) returns public.ventes language plpgsql security definer set search_path = public as
 $$
 declare
@@ -539,11 +614,12 @@ begin
     n := 1;
   end if;
 
-  insert into public.ventes (atelier_id, numero, client, lignes, total, paye, note)
+  insert into public.ventes (atelier_id, numero, client, client_whatsapp, lignes, total, paye, note)
   values (
     a,
     'FAC-' || to_char(now(), 'YYYY') || '-' || lpad(n::text, 4, '0'),
     coalesce(p_client, ''),
+    coalesce(p_client_whatsapp, ''),
     lignes_completes,
     total,
     least(greatest(coalesce(p_paye, 0), 0), total),
@@ -554,4 +630,4 @@ begin
 end
 $$;
 
-grant execute on function public.enregistrer_vente(text, jsonb, numeric, text) to authenticated;
+grant execute on function public.enregistrer_vente(text, jsonb, numeric, text, text) to authenticated;

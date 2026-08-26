@@ -74,6 +74,15 @@ const VueReglages = (() => {
       "</div>" +
 
       '<div class="carte" style="margin-top:14px">' +
+        '<div class="carte-titre">' + UI.icone("clients", "ic-sm") + "Équipe</div>" +
+        '<div id="zone-equipe"><p style="margin:0;font-size:13px;color:var(--encre-tres-douce)">Chargement…</p></div>' +
+        '<button type="button" class="btn btn-clair btn-bloc" id="btn-moderateur" style="margin-top:12px">' +
+          UI.icone("plus", "ic-sm") + "Ajouter un modérateur</button>" +
+        '<div class="aide" style="margin-top:8px">Un modérateur enregistre les commandes et les ventes ' +
+          "de l'atelier. Il ne peut ni modifier ni supprimer, ni voir ces réglages.</div>" +
+      "</div>" +
+
+      '<div class="carte" style="margin-top:14px">' +
         '<div class="carte-titre">' + UI.icone("clients", "ic-sm") + "Compte</div>" +
         '<div class="paires">' +
           '<div class="paire"><span class="l">Connecté en tant que</span><span class="v">' +
@@ -144,6 +153,93 @@ const VueReglages = (() => {
       await Api.deconnexion();
       location.hash = "#/";
       window.AppNaviguer();
+    };
+
+    /* ---------- Équipe : modérateurs de l'atelier ---------- */
+
+    async function rendreEquipe() {
+      const zone = UI.$("#zone-equipe");
+      const membres = (await Api.listerPar("profils", "atelier_id", Api.atelierId()))
+        .filter((m) => m.role === "moderateur");
+      if (!membres.length) {
+        zone.innerHTML = '<p style="margin:0;font-size:13px;color:var(--encre-tres-douce)">' +
+          "Aucun modérateur. Vous êtes seul à gérer cet atelier.</p>";
+        return;
+      }
+      zone.innerHTML = '<div class="mini-liste">' +
+        membres.map((m) =>
+          '<div class="mini"><span class="l"><strong>' + e(m.nom_complet || m.email) + "</strong>" +
+            '<br><span style="color:var(--encre-tres-douce);font-size:12px">' + e(m.email) +
+            (m.telephone ? " · " + e(Utils.fmtTel(m.telephone)) : "") + "</span></span>" +
+            '<button type="button" class="btn btn-danger btn-sm" data-retirer="' + m.id + '">Retirer</button>' +
+          "</div>"
+        ).join("") + "</div>";
+
+      /* onclick (et non addEventListener) : la zone est re-rendue à chaque
+         retrait, les écouteurs s'empileraient sinon. */
+      zone.onclick = async (ev) => {
+        const bouton = ev.target.closest("[data-retirer]");
+        if (!bouton) return;
+        const membre = membres.find((m) => m.id === bouton.dataset.retirer);
+        const ok = await UI.confirmer({
+          titre: "Retirer le modérateur",
+          texte: (membre.nom_complet || membre.email) + " n'aura plus accès à l'atelier. " +
+            "Les commandes et ventes qu'il a enregistrées sont conservées.",
+          bouton: "Retirer l'accès", danger: true,
+        });
+        if (!ok) return;
+        try {
+          await Api.supprimerLigne("profils", membre.id);
+          UI.toast("Accès retiré", "ok");
+          rendreEquipe();
+        } catch (err) {
+          UI.toast(err.message || "Retrait impossible", "erreur");
+        }
+      };
+    }
+    rendreEquipe();
+
+    UI.$("#btn-moderateur").onclick = () => {
+      const corps = UI.ouvrirFeuille("Nouveau modérateur",
+        '<div class="carte">' +
+          '<div class="champ"><label for="mod-nom">Prénom(s) et nom <span class="obligatoire">*</span></label>' +
+            '<input id="mod-nom" autocomplete="off" autocapitalize="words"></div>' +
+          '<div class="champ"><label for="mod-tel">Téléphone</label>' +
+            '<input id="mod-tel" type="tel" inputmode="tel" autocomplete="off"></div>' +
+          '<div class="champ"><label for="mod-email">Email (identifiant) <span class="obligatoire">*</span></label>' +
+            '<input id="mod-email" type="email" inputmode="email" autocomplete="off"></div>' +
+          '<div class="champ"><label for="mod-mdp">Mot de passe <span class="obligatoire">*</span></label>' +
+            '<input id="mod-mdp" type="text" autocomplete="off" placeholder="6 caractères minimum">' +
+            '<div class="aide">À transmettre au modérateur.</div></div>' +
+          '<button type="button" class="btn btn-bloc" id="mod-creer">' +
+            UI.icone("check", "ic-sm") + "Créer le compte</button>" +
+        "</div>");
+
+      UI.$("#mod-creer", corps).onclick = async () => {
+        const nom = UI.$("#mod-nom", corps).value.trim();
+        const email = UI.$("#mod-email", corps).value.trim();
+        const motDePasse = UI.$("#mod-mdp", corps).value;
+        if (!nom) { UI.toast("Indiquez le nom du modérateur", "erreur"); return; }
+        if (!email || !email.includes("@")) { UI.toast("Indiquez un email valide", "erreur"); return; }
+        if (motDePasse.length < 6) { UI.toast("Mot de passe : 6 caractères minimum", "erreur"); return; }
+
+        const bouton = UI.$("#mod-creer", corps);
+        bouton.disabled = true;
+        try {
+          const utilisateur = await Api.creerCompteAdmin(email, motDePasse, nom,
+            UI.$("#mod-tel", corps).value.trim());
+          await Api.mettreAJour("profils", utilisateur.id, {
+            role: "moderateur", atelier_id: Api.atelierId(),
+          });
+          UI.feuilleSansRappel();
+          UI.fermerFeuille();
+          UI.toast("Modérateur ajouté", "ok");
+          rendreEquipe();
+        } catch (err) {
+          UI.toast(err.message || "Création impossible", "erreur");
+          bouton.disabled = false;
+        }
+      };
     };
   }
 

@@ -297,7 +297,8 @@ const Store = (() => {
   /* ---------- Ventes en boutique (factures) ---------- */
 
   const venteVersApp = (l) => l && {
-    id: l.id, numero: l.numero, client: l.client || "", lignes: l.lignes || [],
+    id: l.id, numero: l.numero, client: l.client || "", clientWhatsApp: l.client_whatsapp || "",
+    lignes: l.lignes || [],
     total: Number(l.total) || 0, paye: Number(l.paye) || 0, note: l.note || "", creeLe: l.cree_le,
   };
 
@@ -308,15 +309,115 @@ const Store = (() => {
   const lireVente = async (id) => venteVersApp(await Api.lireLigne("ventes", id));
 
   /** Le serveur vérifie le stock, le décrémente et numérote la facture. */
-  async function enregistrerVente({ client, lignes, paye, note }) {
+  async function enregistrerVente({ client, clientWhatsApp, lignes, paye, note }) {
     if (!lignes || !lignes.length) throw new Error("Ajoutez au moins un article à la vente.");
     return venteVersApp(await Api.rpc("enregistrer_vente", {
       p_client: (client || "").trim(),
+      p_client_whatsapp: (clientWhatsApp || "").trim(),
       p_lignes: lignes.map((l) => ({ produit_id: l.produitId, quantite: l.quantite })),
       p_paye: Math.max(0, Utils.lireNombre(paye)),
       p_note: (note || "").trim(),
     }));
   }
+
+  /* ---------- Facture : message WhatsApp et document A4 ---------- */
+
+  function messageVente(vente) {
+    const r = lireReglages();
+    const solde = Math.max(0, vente.total - vente.paye);
+    return (
+      "Bonjour " + (vente.client || "") + " 👋\n" +
+      "Merci pour votre achat chez " + r.nomAtelier + " !\n" +
+      "Facture " + vente.numero + " du " + Utils.fmtDate(Utils.isoJour(new Date(vente.creeLe))) + "\n\n" +
+      vente.lignes.map((l) =>
+        "• " + l.nom + " × " + l.quantite + " — " + Utils.fmtMontant(l.prix * l.quantite, r.devise)
+      ).join("\n") + "\n\n" +
+      "Total : " + Utils.fmtMontant(vente.total, r.devise) + "\n" +
+      "Payé : " + Utils.fmtMontant(vente.paye, r.devise) +
+      (solde > 0 ? "\nReste à payer : " + Utils.fmtMontant(solde, r.devise) : "") +
+      "\n\nÀ très bientôt !"
+    );
+  }
+
+  const lienWhatsAppVente = (vente) =>
+    Utils.lienWhatsApp(vente.clientWhatsApp, messageVente(vente), lireReglages().indicatif);
+
+  /** Facture A4 imprimable (ou « Enregistrer en PDF »). */
+  function factureA4(vente) {
+    const r = lireReglages();
+    const e = Utils.echapper;
+    const solde = Math.max(0, vente.total - vente.paye);
+    const contacts = [r.telAppelAtelier, r.telWhatsAppAtelier].filter(Boolean).join(" · ");
+    return (
+      "<!DOCTYPE html><html lang='fr'><head><meta charset='utf-8'>" +
+      "<title>" + e(vente.numero) + "</title><style>" +
+      "@page{size:A4;margin:16mm}" +
+      "*{box-sizing:border-box}" +
+      "body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;color:#141636;font-size:12pt;line-height:1.5}" +
+      ".entete{display:flex;align-items:flex-start;gap:14mm;border-bottom:2px solid #2E3192;padding-bottom:6mm}" +
+      ".logo{width:26mm;height:26mm;object-fit:cover;border-radius:3mm}" +
+      ".atelier{flex:1}" +
+      ".atelier h1{margin:0;font-size:20pt;color:#2E3192}" +
+      ".atelier p{margin:1mm 0;font-size:10.5pt;color:#5b5f7d}" +
+      ".titre{text-align:right}" +
+      ".titre h2{margin:0;font-size:16pt;letter-spacing:1px}" +
+      ".titre p{margin:1mm 0;font-size:10.5pt;color:#5b5f7d}" +
+      ".client{margin:8mm 0 6mm;padding:4mm;background:#f4f5fb;border-radius:2mm}" +
+      ".client strong{display:block;font-size:9.5pt;text-transform:uppercase;letter-spacing:1px;color:#5b5f7d}" +
+      "table{width:100%;border-collapse:collapse;margin-top:4mm}" +
+      "th{text-align:left;font-size:9.5pt;text-transform:uppercase;letter-spacing:.6px;color:#5b5f7d;" +
+        "border-bottom:1.5px solid #2E3192;padding:2.5mm 2mm}" +
+      "td{padding:2.5mm 2mm;border-bottom:1px solid #e3e5f0}" +
+      ".num{text-align:right;white-space:nowrap}" +
+      ".totaux{margin-left:auto;margin-top:5mm;width:75mm}" +
+      ".totaux div{display:flex;justify-content:space-between;padding:1.5mm 0}" +
+      ".totaux .grand{border-top:2px solid #2E3192;margin-top:1mm;padding-top:2.5mm;font-size:14pt;font-weight:700;color:#2E3192}" +
+      ".reste{color:#c0392b;font-weight:700}" +
+      ".pied{margin-top:14mm;border-top:1px solid #e3e5f0;padding-top:4mm;font-size:10pt;color:#5b5f7d;text-align:center}" +
+      "</style></head><body>" +
+
+      "<div class='entete'>" +
+        (r.logo ? "<img class='logo' src='" + r.logo + "' alt=''>" : "") +
+        "<div class='atelier'><h1>" + e(r.nomAtelier) + "</h1>" +
+          (r.slogan ? "<p>" + e(r.slogan) + "</p>" : "") +
+          (contacts ? "<p>" + e(contacts) + "</p>" : "") +
+        "</div>" +
+        "<div class='titre'><h2>FACTURE</h2>" +
+          "<p>" + e(vente.numero) + "</p>" +
+          "<p>" + e(Utils.fmtDate(Utils.isoJour(new Date(vente.creeLe)))) + "</p>" +
+        "</div>" +
+      "</div>" +
+
+      "<div class='client'><strong>Client</strong>" +
+        e(vente.client || "Client au comptoir") +
+        (vente.clientWhatsApp ? "<br>" + e(Utils.fmtTel(vente.clientWhatsApp)) : "") +
+      "</div>" +
+
+      "<table><thead><tr><th>Article</th><th class='num'>Prix unitaire</th>" +
+        "<th class='num'>Qté</th><th class='num'>Montant</th></tr></thead><tbody>" +
+        vente.lignes.map((l) =>
+          "<tr><td>" + e(l.nom) + (l.code ? " <span style='color:#8b8fa8'>(" + e(l.code) + ")</span>" : "") + "</td>" +
+            "<td class='num'>" + Utils.fmtMontant(l.prix, r.devise) + "</td>" +
+            "<td class='num'>" + l.quantite + "</td>" +
+            "<td class='num'>" + Utils.fmtMontant(l.prix * l.quantite, r.devise) + "</td></tr>"
+        ).join("") +
+      "</tbody></table>" +
+
+      "<div class='totaux'>" +
+        "<div class='grand'><span>Total</span><span>" + Utils.fmtMontant(vente.total, r.devise) + "</span></div>" +
+        "<div><span>Payé</span><span>" + Utils.fmtMontant(vente.paye, r.devise) + "</span></div>" +
+        (solde > 0
+          ? "<div class='reste'><span>Reste à payer</span><span>" + Utils.fmtMontant(solde, r.devise) + "</span></div>"
+          : "") +
+      "</div>" +
+
+      (vente.note ? "<p style='margin-top:8mm;font-size:10.5pt'><em>" + e(vente.note) + "</em></p>" : "") +
+      "<div class='pied'>Merci de votre confiance — " + e(r.nomAtelier) + "</div>" +
+      "</body></html>"
+    );
+  }
+
+  const imprimerFacture = (vente) => Utils.imprimerA4(vente.numero, factureA4(vente));
 
   /** Annuler une facture remet les articles en stock. */
   async function supprimerVente(id) {
@@ -467,6 +568,7 @@ const Store = (() => {
     photosDeCommande, ajouterPhoto, supprimerPhoto,
     listerDepenses, ajouterDepense, supprimerDepense,
     listerVentes, lireVente, enregistrerVente, supprimerVente, articlesVendus,
+    messageVente, lienWhatsAppVente, factureA4, imprimerFacture,
     paiementsSurPeriode, statsPeriode, messageCommande, exporter,
   };
 })();

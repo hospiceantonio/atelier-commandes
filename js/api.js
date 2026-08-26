@@ -66,6 +66,8 @@ const Api = (() => {
   const lireAtelier = () => atelier;
   const atelierId = () => (profil ? profil.atelier_id : null);
   const lireParametres = () => parametres;
+  /** Administrateur de l'atelier : lui seul modifie et supprime. */
+  const estAdmin = () => !!profil && profil.role === "admin";
 
   async function majParametres(objet) {
     parametres = await mettreAJour("parametres", 1, { ...objet, modifie_le: new Date().toISOString() });
@@ -165,7 +167,7 @@ const Api = (() => {
   return {
     configOk, bibliothequeOk, init, chargerContexte,
     connecte, role, lireProfil, lireAtelier, atelierId, rafraichirAtelier,
-    lireParametres, majParametres,
+    lireParametres, majParametres, estAdmin,
     connexion, creerCompte, creerCompteAdmin, deconnexion,
     lister, listerPar, lireLigne, inserer, mettreAJour, supprimerLigne, rpc,
   };

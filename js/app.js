@@ -35,6 +35,26 @@
     { motif: /^\/reglages$/, vue: (v) => VueSuperAdmin.compte(v) },
   ];
 
+  /* Modérateur : il enregistre commandes et ventes, consulte les listes,
+     mais ne modifie rien et n'accède ni aux réglages ni aux recettes.
+     Le serveur applique les mêmes limites (RLS) : ce routage n'est que
+     le confort de navigation. */
+  const ROUTES_MODERATEUR = [
+    { motif: /^\/$/, vue: (v) => VueAccueil.afficher(v), onglet: "/" },
+    { motif: /^\/clients$/, vue: (v) => VueClients.liste(v), onglet: "/clients" },
+    { motif: /^\/client\/nouveau$/, vue: (v) => VueClients.formulaire(v) },
+    // Les mesures restent modifiables : elles se prennent au moment de la commande.
+    { motif: /^\/client\/([^/]+)\/modifier$/, vue: (v, m) => VueClients.formulaire(v, m[1]) },
+    { motif: /^\/client\/([^/]+)$/, vue: (v, m) => VueClients.fiche(v, m[1]) },
+    { motif: /^\/commandes$/, vue: (v) => VueCommandes.liste(v), onglet: "/commandes" },
+    { motif: /^\/commande\/nouvelle$/, vue: (v, m, p) => VueCommandes.nouvelle(v, p) },
+    { motif: /^\/commande\/([^/]+)$/, vue: (v, m) => VueCommandes.detail(v, m[1]) },
+    { motif: /^\/nouveau$/, vue: () => { location.hash = "#/"; menuNouveau(); } },
+    { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v), onglet: "/ventes" },
+    { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v) },
+    { motif: /^\/vente\/([^/]+)$/, vue: (v, m) => VueVentes.detail(v, m[1]) },
+  ];
+
   /* Boutique publique : visible sans compte. */
   const ROUTES_PUBLIQUES = [
     { motif: /^\/$/, vue: (v) => VueBoutique.accueil(v), onglet: "/" },
@@ -48,6 +68,14 @@
     { href: "#/", tab: "/", icone: "boutique", label: "Accueil" },
     { href: "#/ateliers", tab: "/ateliers", icone: "clients", label: "Ateliers" },
     { href: "#/connexion", tab: "/connexion", icone: "connexion", label: "Se connecter" },
+  ];
+
+  const ONGLETS_MODERATEUR = [
+    { href: "#/", tab: "/", icone: "accueil", label: "Accueil" },
+    { href: "#/commandes", tab: "/commandes", icone: "commandes", label: "Commandes" },
+    { href: "#/nouveau", cta: true, label: "Nouveau" },
+    { href: "#/ventes", tab: "/ventes", icone: "argent", label: "Ventes" },
+    { href: "#/clients", tab: "/clients", icone: "clients", label: "Clients" },
   ];
 
   const ONGLETS_ADMIN = [
@@ -191,9 +219,12 @@
       return;
     }
 
-    const superadmin = Api.role() === "superadmin";
+    const role = Api.role();
+    const superadmin = role === "superadmin";
+    const moderateur = role === "moderateur";
     document.body.classList.toggle("mode-superadmin", superadmin);
-    if (!superadmin) rendreTabbar(ONGLETS_ADMIN, "admin");
+    if (moderateur) rendreTabbar(ONGLETS_MODERATEUR, "moderateur");
+    else if (!superadmin) rendreTabbar(ONGLETS_ADMIN, "admin");
 
     if (!superadmin) {
       if (!Api.lireProfil() || !Api.atelierId() || !Api.lireAtelier()) {
@@ -207,7 +238,8 @@
     }
     masquerVoile();
 
-    await rendreRoute(superadmin ? ROUTES_SUPERADMIN : ROUTES_ADMIN, vue, "#/");
+    await rendreRoute(
+      superadmin ? ROUTES_SUPERADMIN : moderateur ? ROUTES_MODERATEUR : ROUTES_ADMIN, vue, "#/");
   }
 
   function marquerOnglet(onglet) {

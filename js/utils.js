@@ -147,6 +147,26 @@ const Utils = (() => {
     return base + (message ? "?text=" + encodeURIComponent(message) : "");
   }
 
+  /** Ouvre le document HTML dans le dialogue d'impression (A4, ou PDF). */
+  function imprimerA4(nom, html) {
+    if (window.AndroidAtelier && window.AndroidAtelier.imprimer) {
+      window.AndroidAtelier.imprimer(nom, html);
+      return;
+    }
+    const cadre = document.createElement("iframe");
+    cadre.setAttribute("aria-hidden", "true");
+    cadre.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+    cadre.onload = () => {
+      try {
+        cadre.contentWindow.focus();
+        cadre.contentWindow.print();
+      } catch (_) { /* impression refusée par le navigateur */ }
+      setTimeout(() => cadre.remove(), 60000);
+    };
+    document.body.appendChild(cadre);
+    cadre.srcdoc = html;
+  }
+
   function lienTel(tel, indicatif) {
     const num = normaliserTel(tel, indicatif);
     return num ? "tel:+" + num : "";
@@ -271,7 +291,7 @@ const Utils = (() => {
     fmtNombre, fmtMontant, lireNombre,
     isoJour, versDate, aujourdhui, ajouterJours, fmtDate, fmtDateCourte, fmtJourDate,
     fmtDateHeure, fmtHeure, ecartJours, delai, MOIS, MOIS_COURT,
-    normaliserTel, lienWhatsApp, lienTel, fmtTel, telAppel, telWhatsApp,
+    normaliserTel, lienWhatsApp, lienTel, fmtTel, telAppel, telWhatsApp, imprimerA4,
     initiales, nomComplet, sansAccent, tempo, remplirModele, telecharger,
     compresserImage, tailleLisible,
   };

@@ -89,7 +89,9 @@ const VueClients = (() => {
           ? Utils.fmtTel(telAppel)
           : "Appel " + Utils.fmtTel(telAppel) + " · WhatsApp " + Utils.fmtTel(telWa)),
       retour: true,
-      actions: '<a class="btn-ic" href="#/client/' + id + '/modifier" aria-label="Modifier">' + UI.icone("crayon") + "</a>",
+      actions: Api.estAdmin()
+        ? '<a class="btn-ic" href="#/client/' + id + '/modifier" aria-label="Modifier">' + UI.icone("crayon") + "</a>"
+        : "",
     });
 
     let html = "";

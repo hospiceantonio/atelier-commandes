@@ -48,6 +48,12 @@ const VueVentes = (() => {
         '<div class="carte-titre">' + UI.icone("clients", "ic-sm") + "Client et paiement</div>" +
         '<div class="champ"><label for="vte-client">Nom du client (facultatif)</label>' +
           '<input id="vte-client" autocomplete="off" autocapitalize="words" placeholder="Client au comptoir"></div>' +
+        '<div class="champ"><label for="vte-whatsapp">N° WhatsApp du client (facultatif)</label>' +
+          '<input id="vte-whatsapp" type="tel" inputmode="tel" autocomplete="off" placeholder="97 00 00 00"></div>' +
+        '<label class="interrupteur" style="display:flex">' +
+          '<input type="checkbox" id="vte-envoyer" checked>' +
+          "<span>Envoyer la facture au client par <strong>WhatsApp</strong> après l'enregistrement</span>" +
+        "</label>" +
         '<div class="paires">' +
           '<div class="paire"><span class="l">Total de la vente</span>' +
             '<span class="v gros" id="vte-total">' + Utils.fmtMontant(0, devise) + "</span></div>" +
@@ -98,13 +104,18 @@ const VueVentes = (() => {
       bouton.disabled = true;
       try {
         const saisiePaye = UI.$("#vte-paye").value.trim();
+        const numeroWa = UI.$("#vte-whatsapp").value.trim();
         const vente = await Store.enregistrerVente({
           client: UI.$("#vte-client").value,
+          clientWhatsApp: numeroWa,
           lignes: Array.from(panier, ([produitId, quantite]) => ({ produitId, quantite })),
           paye: saisiePaye === "" ? total() : Utils.lireNombre(saisiePaye),
           note: UI.$("#vte-note").value,
         });
         UI.toast("Vente " + vente.numero + " enregistrée", "ok");
+        if (numeroWa && UI.$("#vte-envoyer").checked) {
+          window.open(Store.lienWhatsAppVente(vente), "_blank");
+        }
         location.hash = "#/vente/" + vente.id;
       } catch (err) {
         UI.toast(err.message || "Vente impossible", "erreur");
@@ -193,11 +204,30 @@ const VueVentes = (() => {
             : "") +
         "</div>" +
       "</div>" +
-      '<button type="button" class="btn btn-danger btn-bloc" id="vte-annuler" style="margin-top:12px">' +
-        UI.icone("poubelle", "ic-sm") + "Annuler cette vente</button>" +
-      '<p class="pied-note">Annuler une vente remet les articles en stock.</p>';
 
-    UI.$("#vte-annuler").onclick = async () => {
+      '<div class="btn-rangee" style="margin-top:12px">' +
+        (vente.clientWhatsApp
+          ? '<a class="btn btn-or" id="vte-whatsapp" target="_blank" rel="noopener" href="' +
+              Store.lienWhatsAppVente(vente) + '">' + UI.icone("whatsapp", "ic-sm") + "Envoyer au client</a>"
+          : "") +
+        '<button type="button" class="btn btn-clair" id="vte-imprimer">' +
+          UI.icone("telecharger", "ic-sm") + "Facture A4</button>" +
+      "</div>" +
+
+      (Api.role() === "admin"
+        ? '<button type="button" class="btn btn-danger btn-bloc" id="vte-annuler" style="margin-top:12px">' +
+            UI.icone("poubelle", "ic-sm") + "Annuler cette vente</button>" +
+          '<p class="pied-note">Annuler une vente remet les articles en stock.</p>'
+        : '<p class="pied-note">Seul l\'administrateur de l\'atelier peut annuler une vente.</p>');
+
+    UI.$("#vte-imprimer").onclick = () => {
+      Store.imprimerFacture(vente);
+      UI.toast("Facture A4 : choisissez « Enregistrer au format PDF »", "ok");
+    };
+
+    const boutonAnnuler = UI.$("#vte-annuler");
+    if (!boutonAnnuler) return;
+    boutonAnnuler.onclick = async () => {
       const ok = await UI.confirmer({
         titre: "Annuler la vente",
         texte: "La facture " + vente.numero + " sera supprimée et les articles vendus " +

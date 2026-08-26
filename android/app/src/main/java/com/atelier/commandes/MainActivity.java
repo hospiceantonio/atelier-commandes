@@ -2,10 +2,14 @@ package com.atelier.commandes;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.provider.MediaStore;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -33,6 +37,8 @@ import java.util.List;
  * délégués au système.
  */
 public class MainActivity extends Activity {
+
+    private WebView vueFacture;
 
     private static final String HOTE_LOCAL = "appassets.androidplatform.net";
     private static final String PAGE_ACCUEIL = "https://" + HOTE_LOCAL + "/assets/www/index.html";
@@ -181,6 +187,36 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void ouvrirLien(final String url) {
             runOnUiThread(() -> ouvrirDansSysteme(Uri.parse(url)));
+        }
+
+        /** Facture A4 : passe par le service d'impression Android,
+            qui propose « Enregistrer au format PDF ». */
+        @JavascriptInterface
+        public void imprimer(final String nom, final String html) {
+            runOnUiThread(() -> {
+                final WebView vueImpression = new WebView(MainActivity.this);
+                vueImpression.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public void onPageFinished(WebView vue, String url) {
+                        PrintManager service = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                        if (service == null) {
+                            Toast.makeText(MainActivity.this,
+                                    "Impression non disponible sur cet appareil", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        PrintDocumentAdapter adaptateur = vue.createPrintDocumentAdapter(nom);
+                        service.print(nom, adaptateur, new PrintAttributes.Builder()
+                                .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                .setResolution(new PrintAttributes.Resolution("pdf", "pdf", 300, 300))
+                                .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                                .build());
+                    }
+                });
+                vueImpression.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+                // Référence gardée le temps de l'impression : sinon la vue est
+                // ramassée par le garbage collector avant la génération du PDF.
+                vueFacture = vueImpression;
+            });
         }
 
         @JavascriptInterface

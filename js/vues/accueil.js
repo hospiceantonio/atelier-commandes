@@ -30,7 +30,9 @@ const VueAccueil = (() => {
       titre: r.nomAtelier,
       sous: r.slogan || Utils.fmtJourDate(aujourdhui),
       actions:
-        '<a class="btn-ic" href="#/reglages" aria-label="Réglages">' + UI.icone("reglages") + "</a>",
+        (Api.estAdmin()
+          ? '<a class="btn-ic" href="#/reglages" aria-label="Réglages">' + UI.icone("reglages") + "</a>"
+          : ""),
     });
 
     let html =
