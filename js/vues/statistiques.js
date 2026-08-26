@@ -105,6 +105,10 @@ const VueStats = (() => {
           '<div class="tuile"><div class="tuile-label">' + UI.icone("check", "ic-sm") + 'Livrées</div>' +
             '<div class="tuile-valeur">' + stats.commandesLivrees + "</div>" +
             '<div class="tuile-note">sur la période</div></div>' +
+          '<div class="tuile"><div class="tuile-label">' + UI.icone("boutique", "ic-sm") + 'Ventes boutique</div>' +
+            '<div class="tuile-valeur">' + Utils.fmtMontant(stats.totalVentes, r.devise) + "</div>" +
+            '<div class="tuile-note">' + stats.ventes.length + " facture" + (stats.ventes.length > 1 ? "s" : "") +
+              " · " + stats.articlesVendus + " article" + (stats.articlesVendus > 1 ? "s" : "") + "</div></div>" +
           '<div class="tuile tuile-rouge"><div class="tuile-label">' + UI.icone("horloge", "ic-sm") + 'Reste à encaisser</div>' +
             '<div class="tuile-valeur">' + Utils.fmtMontant(stats.soldesOuverts, r.devise) + "</div>" +
             '<div class="tuile-note">commandes non soldées</div></div>' +
@@ -143,10 +147,14 @@ const VueStats = (() => {
       if (stats.paiements.length) {
         html += '<div class="carte"><div class="mini-liste">' +
           stats.paiements.slice(0, 60).map((p) => {
-            const client = parId.get(p.commande.clientId);
+            /* Une entrée provient soit d'une commande, soit d'une vente boutique. */
+            const titre = p.vente
+              ? (p.vente.client || "Client au comptoir")
+              : Utils.nomComplet(parId.get(p.commande.clientId));
+            const reference = p.vente ? p.vente.numero : p.commande.numero;
             return (
               '<div class="mini">' +
-                '<span class="l"><strong>' + e(Utils.nomComplet(client)) + "</strong> · " + e(p.commande.numero) +
+                '<span class="l"><strong>' + e(titre) + "</strong> · " + e(reference) +
                   '<br><span style="color:var(--encre-tres-douce);font-size:12px">' + e(p.note || "Versement") + " — " + Utils.fmtDateHeure(p.date) + "</span></span>" +
                 '<span class="v" style="color:var(--vert)">+' + Utils.fmtMontant(p.montant, r.devise) + "</span>" +
               "</div>"

@@ -20,6 +20,10 @@
     { motif: /^\/statistiques$/, vue: (v) => VueStats.afficher(v), onglet: "/statistiques" },
     { motif: /^\/reglages$/, vue: (v) => VueReglages.afficher(v) },
     { motif: /^\/produits$/, vue: (v) => VueProduits.liste(v), onglet: "/produits" },
+    { motif: /^\/nouveau$/, vue: () => { location.hash = "#/"; menuNouveau(); } },
+    { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v) },
+    { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v) },
+    { motif: /^\/vente\/([^/]+)$/, vue: (v, m) => VueVentes.detail(v, m[1]) },
     { motif: /^\/produit-gere\/nouveau$/, vue: (v) => VueProduits.formulaire(v) },
     { motif: /^\/produit-gere\/([^/]+)$/, vue: (v, m) => VueProduits.formulaire(v, m[1]) },
   ];
@@ -49,7 +53,7 @@
   const ONGLETS_ADMIN = [
     { href: "#/", tab: "/", icone: "accueil", label: "Accueil" },
     { href: "#/commandes", tab: "/commandes", icone: "commandes", label: "Commandes" },
-    { href: "#/commande/nouvelle", cta: true, label: "Nouvelle commande" },
+    { href: "#/nouveau", cta: true, label: "Nouveau" },
     { href: "#/produits", tab: "/produits", icone: "boutique", label: "Vitrine" },
     { href: "#/clients", tab: "/clients", icone: "clients", label: "Clients" },
     { href: "#/statistiques", tab: "/statistiques", icone: "stats", label: "Recettes" },
@@ -62,7 +66,7 @@
     ongletsRendus = cle;
     document.getElementById("tabbar").innerHTML = onglets.map((o) =>
       o.cta
-        ? '<a href="' + o.href + '" class="tab-cta" aria-label="' + Utils.echapper(o.label) + '">' +
+        ? '<a href="' + o.href + '" class="tab-cta" data-menu-nouveau aria-label="' + Utils.echapper(o.label) + '">' +
             '<span class="tab-cta-rond">' + UI.icone("plus") + "</span></a>"
         : '<a href="' + o.href + '" data-tab="' + o.tab + '">' + UI.icone(o.icone) +
             "<span>" + Utils.echapper(o.label) + "</span></a>"
@@ -177,12 +181,9 @@
       if (cheminDemande === "/connexion") {
         vue.innerHTML = "";
         marquerOnglet("/connexion");
-        // Ne pas re-rendre si un formulaire de connexion ou d'inscription est
-        // déjà affiché : un second rendu (hash + appel direct) effacerait la
-        // saisie en cours.
-        if (!document.getElementById("form-connexion") && !document.getElementById("form-inscription")) {
-          VueConnexion.afficher();
-        }
+        // Ne pas re-rendre si le formulaire est déjà affiché : un second
+        // rendu (hash + appel direct) effacerait la saisie en cours.
+        if (!document.getElementById("form-connexion")) VueConnexion.afficher();
         return;
       }
       masquerVoile();
@@ -243,7 +244,39 @@
 
   /* ---------- Délégation des interactions globales ---------- */
 
+  /* Le bouton « + » propose commande ou vente. */
+  function menuNouveau() {
+    const corps = UI.ouvrirFeuille("Que voulez-vous créer ?",
+      '<button type="button" class="ligne" data-aller="#/commande/nouvelle">' +
+        '<span class="pastille">' + UI.icone("commandes", "ic-sm") + "</span>" +
+        '<span class="ligne-corps"><span class="ligne-titre">Nouvelle commande</span>' +
+          '<span class="ligne-sous">Vêtement sur mesure pour un client</span></span>' +
+      "</button>" +
+      '<button type="button" class="ligne" style="margin-top:10px" data-aller="#/vente-nouvelle">' +
+        '<span class="pastille">' + UI.icone("argent", "ic-sm") + "</span>" +
+        '<span class="ligne-corps"><span class="ligne-titre">Nouvelle vente</span>' +
+          '<span class="ligne-sous">Facture sur les articles en stock</span></span>' +
+      "</button>" +
+      '<button type="button" class="ligne" style="margin-top:10px" data-aller="#/ventes">' +
+        '<span class="pastille">' + UI.icone("stats", "ic-sm") + "</span>" +
+        '<span class="ligne-corps"><span class="ligne-titre">Mes ventes</span>' +
+          '<span class="ligne-sous">Historique des factures</span></span>' +
+      "</button>");
+    corps.addEventListener("click", (ev) => {
+      const choix = ev.target.closest("[data-aller]");
+      if (!choix) return;
+      UI.fermerFeuille();
+      location.hash = choix.dataset.aller;
+    });
+  }
+
   document.addEventListener("click", (ev) => {
+    const nouveau = ev.target.closest("[data-menu-nouveau]");
+    if (nouveau) {
+      ev.preventDefault();
+      menuNouveau();
+      return;
+    }
     const nav = ev.target.closest("[data-nav]");
     if (nav) {
       location.hash = nav.dataset.nav;

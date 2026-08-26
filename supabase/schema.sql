@@ -451,3 +451,107 @@ create or replace view public.ateliers_publics as
   where abonnement_fin > now();
 
 grant select on public.ateliers_publics to anon, authenticated;
+
+-- =========================================================
+-- Stock et ventes en boutique (factures)
+-- =========================================================
+
+-- Le stock ne concerne que l'atelier : il n'est jamais affiché au public.
+alter table public.produits add column if not exists stock integer not null default 0;
+
+alter table public.compteurs add column if not exists prochaine_facture integer not null default 1;
+
+create table if not exists public.ventes (
+  id         uuid primary key default gen_random_uuid(),
+  atelier_id uuid not null references public.ateliers (id) on delete cascade,
+  numero     text not null,
+  client     text not null default '',
+  lignes     jsonb not null default '[]',  -- [{produit_id, nom, code, prix, quantite}]
+  total      numeric not null default 0,
+  paye       numeric not null default 0,
+  note       text not null default '',
+  cree_le    timestamptz not null default now()
+);
+
+create index if not exists ventes_par_atelier on public.ventes (atelier_id);
+
+alter table public.ventes enable row level security;
+
+drop policy if exists ventes_par_atelier on public.ventes;
+create policy ventes_par_atelier on public.ventes for all to authenticated
+  using (atelier_id = public.atelier_courant())
+  with check (atelier_id = public.atelier_courant());
+
+-- Vente atomique : vérifie le stock, décrémente, numérote et facture.
+-- Tout se fait dans une seule transaction : deux ventes simultanées ne
+-- peuvent pas vendre deux fois le dernier article (verrou for update).
+create or replace function public.enregistrer_vente(
+  p_client text, p_lignes jsonb, p_paye numeric, p_note text default ''
+) returns public.ventes language plpgsql security definer set search_path = public as
+$$
+declare
+  a uuid;
+  n integer;
+  ligne jsonb;
+  produit public.produits%rowtype;
+  quantite integer;
+  total numeric := 0;
+  lignes_completes jsonb := '[]'::jsonb;
+  vente public.ventes%rowtype;
+begin
+  select atelier_id into a from public.profils where id = auth.uid();
+  if a is null then
+    raise exception 'Aucun atelier associé à ce compte';
+  end if;
+  if p_lignes is null or jsonb_array_length(p_lignes) = 0 then
+    raise exception 'Aucun article dans la vente';
+  end if;
+
+  for ligne in select * from jsonb_array_elements(p_lignes) loop
+    quantite := coalesce((ligne ->> 'quantite')::integer, 0);
+    if quantite < 1 then
+      raise exception 'Quantité invalide';
+    end if;
+    select * into produit from public.produits
+      where id = (ligne ->> 'produit_id')::uuid and atelier_id = a
+      for update;
+    if not found then
+      raise exception 'Article introuvable dans votre vitrine';
+    end if;
+    if produit.stock < quantite then
+      raise exception 'Stock insuffisant pour « % » (reste %)', produit.nom, produit.stock;
+    end if;
+    update public.produits
+      set stock = stock - quantite, modifie_le = now()
+      where id = produit.id;
+    total := total + produit.prix * quantite;
+    lignes_completes := lignes_completes || jsonb_build_object(
+      'produit_id', produit.id, 'nom', produit.nom, 'code', produit.code,
+      'prix', produit.prix, 'quantite', quantite);
+  end loop;
+
+  update public.compteurs set prochaine_facture = prochaine_facture + 1
+    where atelier_id = a
+    returning prochaine_facture - 1 into n;
+  if n is null then
+    insert into public.compteurs (atelier_id, prochaine_facture) values (a, 2)
+      on conflict (atelier_id) do update set prochaine_facture = public.compteurs.prochaine_facture + 1;
+    n := 1;
+  end if;
+
+  insert into public.ventes (atelier_id, numero, client, lignes, total, paye, note)
+  values (
+    a,
+    'FAC-' || to_char(now(), 'YYYY') || '-' || lpad(n::text, 4, '0'),
+    coalesce(p_client, ''),
+    lignes_completes,
+    total,
+    least(greatest(coalesce(p_paye, 0), 0), total),
+    coalesce(p_note, '')
+  )
+  returning * into vente;
+  return vente;
+end
+$$;
+
+grant execute on function public.enregistrer_vente(text, jsonb, numeric, text) to authenticated;

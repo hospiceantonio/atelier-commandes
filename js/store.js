@@ -294,6 +294,49 @@ const Store = (() => {
 
   const supprimerDepense = (id) => Api.supprimerLigne("depenses", id);
 
+  /* ---------- Ventes en boutique (factures) ---------- */
+
+  const venteVersApp = (l) => l && {
+    id: l.id, numero: l.numero, client: l.client || "", lignes: l.lignes || [],
+    total: Number(l.total) || 0, paye: Number(l.paye) || 0, note: l.note || "", creeLe: l.cree_le,
+  };
+
+  async function listerVentes() {
+    return (await Api.lister("ventes", "cree_le", false)).map(venteVersApp);
+  }
+
+  const lireVente = async (id) => venteVersApp(await Api.lireLigne("ventes", id));
+
+  /** Le serveur vérifie le stock, le décrémente et numérote la facture. */
+  async function enregistrerVente({ client, lignes, paye, note }) {
+    if (!lignes || !lignes.length) throw new Error("Ajoutez au moins un article à la vente.");
+    return venteVersApp(await Api.rpc("enregistrer_vente", {
+      p_client: (client || "").trim(),
+      p_lignes: lignes.map((l) => ({ produit_id: l.produitId, quantite: l.quantite })),
+      p_paye: Math.max(0, Utils.lireNombre(paye)),
+      p_note: (note || "").trim(),
+    }));
+  }
+
+  /** Annuler une facture remet les articles en stock. */
+  async function supprimerVente(id) {
+    const vente = await lireVente(id);
+    if (!vente) throw new Error("Facture introuvable.");
+    for (const ligne of vente.lignes) {
+      const produit = await Api.lireLigne("produits", ligne.produit_id);
+      if (produit) {
+        await Api.mettreAJour("produits", produit.id, {
+          stock: (Number(produit.stock) || 0) + (Number(ligne.quantite) || 0),
+          modifie_le: new Date().toISOString(),
+        });
+      }
+    }
+    await Api.supprimerLigne("ventes", id);
+  }
+
+  const articlesVendus = (vente) =>
+    (vente.lignes || []).reduce((somme, l) => somme + (Number(l.quantite) || 0), 0);
+
   /* ---------- Statistiques (recettes et dépenses) ---------- */
 
   async function paiementsSurPeriode(isoDebut, isoFin) {
@@ -315,7 +358,9 @@ const Store = (() => {
   }
 
   async function statsPeriode(isoDebut, isoFin) {
-    const [commandes, toutesDepenses] = await Promise.all([listerCommandes(), listerDepenses()]);
+    const [commandes, toutesDepenses, toutesVentes] = await Promise.all([
+      listerCommandes(), listerDepenses(), listerVentes(),
+    ]);
 
     const debut = Utils.versDate(isoDebut);
     const fin = Utils.versDate(isoFin);
@@ -331,6 +376,16 @@ const Store = (() => {
         if (dansPeriode(p.date)) paiements.push({ ...p, commande: c });
       }
     }
+    /* Les ventes en boutique comptent comme des encaissements du jour. */
+    const ventes = toutesVentes.filter((v) => dansPeriode(v.creeLe));
+    for (const v of ventes) {
+      if (v.paye > 0) {
+        paiements.push({
+          id: v.id, montant: v.paye, date: new Date(v.creeLe).getTime(),
+          note: "Vente " + v.numero, vente: v,
+        });
+      }
+    }
     paiements.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     const commandesCreees = commandes.filter((c) => dansPeriode(c.creeLe));
@@ -343,7 +398,9 @@ const Store = (() => {
     const montantCommandes = commandesCreees.reduce((somme, c) => somme + (Number(c.montant) || 0), 0);
     const soldesOuverts = commandes
       .filter((c) => c.statut !== "livree" || soldeRestant(c) > 0)
-      .reduce((somme, c) => somme + soldeRestant(c), 0);
+      .reduce((somme, c) => somme + soldeRestant(c), 0) +
+      toutesVentes.reduce((somme, v) => somme + Math.max(0, v.total - v.paye), 0);
+    const totalVentes = ventes.reduce((somme, v) => somme + v.total, 0);
 
     const parJour = {};
     for (const p of paiements) {
@@ -362,6 +419,9 @@ const Store = (() => {
       commandesLivrees: commandesLivrees.length,
       montantCommandes,
       soldesOuverts,
+      ventes,
+      totalVentes,
+      articlesVendus: ventes.reduce((somme, v) => somme + articlesVendus(v), 0),
       parJour,
     };
   }
@@ -406,6 +466,7 @@ const Store = (() => {
     totalPaye, acompteVerse, soldeRestant, estEnRetard,
     photosDeCommande, ajouterPhoto, supprimerPhoto,
     listerDepenses, ajouterDepense, supprimerDepense,
+    listerVentes, lireVente, enregistrerVente, supprimerVente, articlesVendus,
     paiementsSurPeriode, statsPeriode, messageCommande, exporter,
   };
 })();

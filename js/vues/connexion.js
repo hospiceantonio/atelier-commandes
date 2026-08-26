@@ -46,7 +46,6 @@ const VueConnexion = (() => {
         "</form>" +
         invitationEnregistrement() +
         '<p class="voile-contact"><a href="#" id="cx-retour-boutique" style="text-decoration:underline">← Retour à la boutique</a></p>' +
-        '<p class="voile-contact"><a href="#" id="cx-inscription" style="text-decoration:underline">Première installation : créer un compte</a></p>' +
       "</div>";
     voile.hidden = false;
     document.body.style.overflow = "hidden";
@@ -69,64 +68,11 @@ const VueConnexion = (() => {
       }
     });
 
-    document.getElementById("cx-inscription").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      afficherInscription();
-    });
-
     document.getElementById("cx-retour-boutique").addEventListener("click", (ev) => {
       ev.preventDefault();
       masquer();
       location.hash = "#/";
       window.AppNaviguer();
-    });
-  }
-
-  /* Auto-inscription de première installation (compte inerte sans atelier). */
-  function afficherInscription() {
-    const voile = document.getElementById("voile-licence");
-    voile.innerHTML =
-      '<div class="voile-boite">' +
-        '<img src="icons/icon-192.png" alt="" class="voile-logo">' +
-        "<h1>Créer un compte</h1>" +
-        '<p class="voile-texte">Réservé à la première installation. Le compte créé reste inactif ' +
-          "tant qu'il n'est pas activé côté Supabase.</p>" +
-        '<form id="form-inscription" style="text-align:left;margin-top:14px">' +
-          '<div class="champ"><label for="in-nom">Prénom(s) et nom</label>' +
-            '<input id="in-nom" autocomplete="name" autocapitalize="words"></div>' +
-          '<div class="champ"><label for="in-tel">Téléphone</label>' +
-            '<input id="in-tel" type="tel" inputmode="tel" autocomplete="tel"></div>' +
-          '<div class="champ"><label for="in-email">Email</label>' +
-            '<input id="in-email" type="email" autocomplete="email" required></div>' +
-          '<div class="champ"><label for="in-mdp">Mot de passe (6 caractères minimum)</label>' +
-            '<input id="in-mdp" type="password" autocomplete="new-password" required></div>' +
-          '<button type="submit" class="btn btn-bloc" id="in-bouton">Créer le compte</button>' +
-        "</form>" +
-        '<p class="voile-contact"><a href="#" id="in-retour" style="text-decoration:underline">← Retour à la connexion</a></p>' +
-      "</div>";
-
-    document.getElementById("in-retour").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      afficher();
-    });
-
-    const bouton = document.getElementById("in-bouton");
-    document.getElementById("form-inscription").addEventListener("submit", async (ev) => {
-      ev.preventDefault();
-      bouton.disabled = true;
-      try {
-        await Api.creerCompte(
-          document.getElementById("in-email").value.trim(),
-          document.getElementById("in-mdp").value,
-          document.getElementById("in-nom").value,
-          document.getElementById("in-tel").value
-        );
-        UI.toast("Compte créé — connectez-vous", "ok");
-        afficher();
-      } catch (err) {
-        UI.toast(err.message || "Création impossible", "erreur");
-        bouton.disabled = false;
-      }
     });
   }
 

@@ -64,9 +64,9 @@ const VueProduits = (() => {
                 '<span class="ligne-sous">' + (p.code ? e(p.code) : "Sans code") + "</span>" +
               "</span>" +
               '<span class="ligne-fin">' +
-                (p.prix_visible
-                  ? '<span class="badge badge-fait">Prix affiché</span>'
-                  : '<span class="badge badge-ok">Prix masqué</span>') +
+                (p.stock > 0
+                  ? '<span class="badge badge-fait">' + p.stock + " en stock</span>"
+                  : '<span class="badge badge-danger">Épuisé</span>') +
                 '<span class="ligne-montant">' + Utils.fmtMontant(p.prix, Store.lireReglages().devise) + "</span>" +
               "</span>" +
             "</button>"
@@ -127,6 +127,11 @@ const VueProduits = (() => {
               (!produit || produit.prix_visible ? " checked" : "") + ">" +
             "<span>Afficher le prix dans la boutique publique (sinon : « Prix sur demande »)</span>" +
           "</label>" +
+          '<div class="champ" style="margin-top:14px"><label for="prod-stock">Stock disponible</label>' +
+            '<input id="prod-stock" inputmode="numeric" autocomplete="off" value="' +
+              e(String(produit ? produit.stock : 0)) + '">' +
+            '<div class="aide">Visible de vous seul. Chaque facture émise depuis « Nouvelle vente » ' +
+              "retire automatiquement les articles vendus.</div></div>" +
         "</div>" +
 
         '<button type="submit" class="btn btn-bloc" id="prod-enregistrer">' +
@@ -194,6 +199,7 @@ const VueProduits = (() => {
           categorie: UI.$("#prod-categorie").value.trim() || "Autres",
           prix,
           prix_visible: UI.$("#prod-prix-visible").checked,
+          stock: Math.max(0, Math.round(Utils.lireNombre(UI.$("#prod-stock").value))),
           couverture: photos.length ? await miniature(photos[0]) : "",
           modifie_le: new Date().toISOString(),
         };
