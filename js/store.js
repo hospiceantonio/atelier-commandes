@@ -72,6 +72,9 @@ const Store = (() => {
     return lireReglages();
   }
 
+  /** Renouvellement par code : le serveur valide, consomme et prolonge. */
+  const utiliserCode = (code) => Api.rpc("utiliser_code", { p_code: code });
+
   /** Bandeau d'alerte quand la fin d'abonnement approche (≤ 5 jours). */
   function bandeauAbonnement() {
     const r = lireReglages();
@@ -743,7 +746,7 @@ const Store = (() => {
   }
 
   return {
-    STATUTS, lireReglages, majReglages, bandeauAbonnement,
+    STATUTS, lireReglages, majReglages, bandeauAbonnement, utiliserCode,
     listerClients, lireClient, sauverClient, supprimerClient, chercherClients,
     listerCommandes, lireCommande, commandesDuClient, sauverCommande,
     changerStatut, ajouterPaiement, retirerPaiement, supprimerCommande,

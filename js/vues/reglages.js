@@ -32,6 +32,20 @@ const VueReglages = (() => {
         '<div class="aide" style="margin-top:8px">Ces informations sont gérées par votre fournisseur.</div>' +
       "</div>" +
 
+      '<div class="carte">' +
+        '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Renouveler avec un code</div>" +
+        '<p style="margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--encre-douce)">' +
+          "Vous avez acheté un code auprès de votre fournisseur ? Saisissez-le ici : " +
+          "il prolonge votre abonnement d'un mois." +
+        "</p>" +
+        '<div class="champ"><label for="code-abo">Code de renouvellement</label>' +
+          '<input id="code-abo" autocomplete="off" autocapitalize="characters" spellcheck="false" ' +
+            'placeholder="ABCD-EFGH-JKLM" maxlength="14"></div>' +
+        '<button type="button" class="btn btn-bloc" id="btn-code">' +
+          UI.icone("check", "ic-sm") + "Valider le code</button>" +
+        '<div class="aide" style="margin-top:8px">Chaque code ne sert qu\'une seule fois.</div>' +
+      "</div>" +
+
       '<form id="form-perso">' +
         '<div class="carte">' +
           '<div class="carte-titre">' + UI.icone("crayon", "ic-sm") + "Personnalisation</div>" +
@@ -139,6 +153,39 @@ const VueReglages = (() => {
 
     const boutonRenouveler = UI.$("#btn-renouveler");
     if (boutonRenouveler) boutonRenouveler.onclick = () => Paiement.payer();
+
+    /* Renouvellement par code */
+    const champCode = UI.$("#code-abo");
+    champCode.addEventListener("input", () => {
+      // Mise en forme au fil de la frappe : ABCD-EFGH-JKLM
+      const brut = champCode.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+      champCode.value = (brut.match(/.{1,4}/g) || []).join("-");
+    });
+
+    UI.$("#btn-code").onclick = async () => {
+      const bouton = UI.$("#btn-code");
+      const saisi = champCode.value.trim();
+      if (saisi.replace(/[^A-Z0-9]/gi, "").length !== 12) {
+        UI.toast("Un code compte 12 caractères", "erreur");
+        return;
+      }
+      bouton.disabled = true;
+      try {
+        const reponse = await Store.utiliserCode(saisi);
+        if (reponse.statut === "ok") {
+          UI.toast("Abonnement prolongé d'un mois", "ok");
+          await Api.rafraichirAtelier();
+          afficher(vue);
+          return;
+        }
+        UI.toast(reponse.statut === "deja_utilise"
+          ? "Ce code a déjà été utilisé."
+          : "Code inconnu — vérifiez la saisie.", "erreur");
+      } catch (err) {
+        UI.toast(err.message || "Vérification impossible", "erreur");
+      }
+      bouton.disabled = false;
+    };
 
     UI.$("#btn-exporter").onclick = async () => {
       try {

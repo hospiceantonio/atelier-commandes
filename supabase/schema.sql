@@ -193,6 +193,12 @@ create or replace function public.proteger_atelier()
 returns trigger language plpgsql security definer set search_path = public as
 $$
 begin
+  -- Les fonctions de crédit d'abonnement (code, paiement) posent ce
+  -- drapeau le temps de leur transaction ; il n'est pas atteignable
+  -- depuis l'application.
+  if coalesce(current_setting('app.abonnement_interne', true), '') = 'on' then
+    return new;
+  end if;
   if auth.uid() is not null and public.role_courant() is distinct from 'superadmin' then
     new.nom := old.nom;
     new.devise := old.devise;
@@ -541,6 +547,133 @@ update public.ateliers
  where modele_whatsapp like '%• Livraison prévue :%'
    and modele_whatsapp not like '%{description}%';
 
+
+-- =========================================================
+-- Codes de renouvellement d'abonnement (à usage unique)
+-- =========================================================
+
+create table if not exists public.codes_abonnement (
+  id          uuid primary key default gen_random_uuid(),
+  code        text not null unique,
+  lot         text not null default '',
+  cree_le     timestamptz not null default now(),
+  utilise_le  timestamptz,
+  utilise_par uuid references public.ateliers (id) on delete set null
+);
+
+create index if not exists codes_par_lot on public.codes_abonnement (lot);
+
+alter table public.codes_abonnement enable row level security;
+
+-- Seul le superadministrateur voit et gère les codes. Un atelier ne
+-- doit jamais pouvoir lire la table : il lirait tous les codes en vente.
+drop policy if exists codes_superadmin on public.codes_abonnement;
+create policy codes_superadmin on public.codes_abonnement for all to authenticated
+  using (public.role_courant() = 'superadmin')
+  with check (public.role_courant() = 'superadmin');
+
+-- Génération d'un lot. Chaque code vaut un mois. Alphabet sans
+-- caractères ambigus (ni 0/O ni 1/I), tirage cryptographique,
+-- format ABCD-EFGH-JKLM.
+create or replace function public.generer_codes(
+  p_nombre integer, p_lot text default ''
+) returns setof public.codes_abonnement
+language plpgsql security definer set search_path = public as
+$$
+declare
+  alphabet constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  i integer; j integer; brut text; complet text;
+  nouveau public.codes_abonnement;
+begin
+  if public.role_courant() is distinct from 'superadmin' then
+    raise exception 'Réservé au superadministrateur';
+  end if;
+  if p_nombre is null or p_nombre < 1 or p_nombre > 200 then
+    raise exception 'Indiquez un nombre de codes entre 1 et 200';
+  end if;
+
+  for i in 1..p_nombre loop
+    loop
+      brut := '';
+      for j in 1..12 loop
+        brut := brut || substr(alphabet,
+          1 + (get_byte(gen_random_bytes(1), 0) % length(alphabet)), 1);
+      end loop;
+      complet := substr(brut,1,4) || '-' || substr(brut,5,4) || '-' || substr(brut,9,4);
+      begin
+        insert into public.codes_abonnement (code, lot)
+        values (complet, coalesce(p_lot, ''))
+        returning * into nouveau;
+        exit;
+      exception when unique_violation then
+        -- collision très improbable : on retire un code
+      end;
+    end loop;
+    return next nouveau;
+  end loop;
+end
+$$;
+
+revoke all on function public.generer_codes(integer, text) from public, anon;
+grant execute on function public.generer_codes(integer, text) to authenticated;
+
+-- Utilisation d'un code par l'administrateur d'un atelier. Le verrou
+-- « for update » interdit qu'un même code serve deux fois, même saisi
+-- au même instant sur deux téléphones.
+create or replace function public.utiliser_code(p_code text)
+returns jsonb language plpgsql security definer set search_path = public as
+$$
+declare
+  a public.ateliers%rowtype;
+  ligne public.codes_abonnement%rowtype;
+  nettoye text;
+  nouvelle_fin timestamptz;
+begin
+  if public.role_courant() is distinct from 'admin' then
+    raise exception 'Réservé à l''administrateur de l''atelier';
+  end if;
+  select * into a from public.ateliers where id = public.atelier_courant();
+  if not found then
+    raise exception 'Aucun atelier associé à ce compte';
+  end if;
+
+  nettoye := upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g'));
+  if length(nettoye) <> 12 then
+    return jsonb_build_object('statut', 'invalide');
+  end if;
+  nettoye := substr(nettoye,1,4) || '-' || substr(nettoye,5,4) || '-' || substr(nettoye,9,4);
+
+  select * into ligne from public.codes_abonnement where code = nettoye for update;
+  if not found then
+    return jsonb_build_object('statut', 'invalide');
+  end if;
+  if ligne.utilise_le is not null then
+    return jsonb_build_object('statut', 'deja_utilise');
+  end if;
+
+  -- Un code prolonge d'un mois, pas davantage.
+  perform set_config('app.abonnement_interne', 'on', true);
+  nouvelle_fin := greatest(a.abonnement_fin, now()) + interval '31 days';
+  update public.ateliers set abonnement_fin = nouvelle_fin where id = a.id;
+  update public.codes_abonnement
+     set utilise_le = now(), utilise_par = a.id
+   where id = ligne.id;
+  insert into public.paiements_abonnement (atelier_id, reference, montant, mois, fin_avant, fin_apres)
+  values (a.id, 'code:' || ligne.code, a.abonnement_mensuel, 1, a.abonnement_fin, nouvelle_fin);
+  perform set_config('app.abonnement_interne', 'off', true);
+
+  return jsonb_build_object('statut', 'ok', 'fin', nouvelle_fin);
+end
+$$;
+
+revoke all on function public.utiliser_code(text) from public, anon;
+grant execute on function public.utiliser_code(text) to authenticated;
+
+-- L'insertion au journal des paiements vient aussi des codes.
+drop policy if exists paiements_creation on public.paiements_abonnement;
+create policy paiements_creation on public.paiements_abonnement for insert to authenticated
+  with check (public.role_courant() = 'superadmin');
+
 -- =========================================================
 -- Tableau de bord du superadministrateur
 -- =========================================================
@@ -574,7 +707,9 @@ begin
     'factures',             (select count(*) from public.ventes),
     'factures_montant',     (select coalesce(sum(total), 0) from public.ventes),
     'factures_mois',        (select count(*) from public.ventes where cree_le >= date_trunc('month', now())),
-    'bannieres',            (select count(*) from public.bannieres where active)
+    'bannieres',            (select count(*) from public.bannieres where active),
+    'codes_disponibles',    (select count(*) from public.codes_abonnement where utilise_le is null),
+    'codes_utilises',       (select count(*) from public.codes_abonnement where utilise_le is not null)
   );
 end
 $$;

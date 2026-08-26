@@ -506,7 +506,147 @@ const VueSuperAdmin = (() => {
         "les renouvellements « + 1 mois » sont ceux que vous encaissez vous-même.</p>";
   }
 
-  /* ---------- Bannières du carrousel d'accueil ---------- */
+  /* ---------- Codes de renouvellement ---------- */
+
+  async function codes(vue) {
+    const liste = await Api.lister("codes_abonnement", "cree_le", false);
+    const ateliers = await Api.lister("ateliers");
+    const nomAtelier = {};
+    for (const a of ateliers) nomAtelier[a.id] = a.nom;
+
+    const libres = liste.filter((c) => !c.utilise_le);
+    const utilises = liste.filter((c) => c.utilise_le);
+
+    UI.entete({
+      titre: "Codes",
+      sous: libres.length + " disponible" + (libres.length > 1 ? "s" : "") +
+        " · " + utilises.length + " utilisé" + (utilises.length > 1 ? "s" : ""),
+      retour: true,
+      actions: '<button type="button" class="btn-ic" id="cd-nouveau" aria-label="Générer des codes">' +
+        UI.icone("plus") + "</button>",
+    });
+
+    vue.innerHTML =
+      '<div class="carte">' +
+        '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Comment ça marche</div>" +
+        '<p style="margin:0;font-size:13px;line-height:1.55;color:var(--encre-douce)">' +
+          "Vous générez des codes, vous les vendez. L'atelier saisit le sien dans ses réglages " +
+          "et son abonnement est prolongé d'un mois. <strong>Chaque code ne sert qu'une fois</strong> : " +
+          "une fois utilisé, il ne fonctionne plus nulle part." +
+        "</p>" +
+        '<button type="button" class="btn btn-bloc" id="cd-generer" style="margin-top:12px">' +
+          UI.icone("plus", "ic-sm") + "Générer des codes</button>" +
+      "</div>" +
+
+      (libres.length
+        ? '<div class="section-titre">' + UI.icone("argent", "ic-sm") + "Disponibles (" + libres.length + ")" +
+            '<a class="lien" id="cd-copier" style="cursor:pointer">Tout copier</a></div>' +
+          '<div class="carte"><div class="mini-liste">' +
+          libres.map((c) =>
+            '<div class="mini"><span class="l">' +
+              '<span style="font-family:ui-monospace,monospace;font-size:16px;letter-spacing:1.5px;' +
+                'font-weight:700;white-space:nowrap;user-select:all">' + e(c.code) + "</span>" +
+              '<br><span style="color:var(--encre-tres-douce);font-size:12px">' +
+                (c.lot ? e(c.lot) + " · " : "") + Utils.fmtDate(Utils.isoJour(new Date(c.cree_le))) + "</span></span>" +
+              '<button type="button" class="btn-ic" style="width:30px;height:30px;' +
+                'background:var(--rouge-clair);color:var(--rouge)" data-suppr-code="' + c.id + '" ' +
+                'aria-label="Supprimer ce code">' + UI.icone("poubelle", "ic-sm") + "</button>" +
+            "</div>").join("") +
+          "</div></div>"
+        : UI.vide("argent", "Aucun code disponible",
+            "Générez un lot de codes à vendre à vos ateliers.")) +
+
+      (utilises.length
+        ? '<div class="section-titre">' + UI.icone("check", "ic-sm") + "Utilisés (" + utilises.length + ")</div>" +
+          '<div class="carte"><div class="mini-liste">' +
+          utilises.slice(0, 60).map((c) =>
+            '<div class="mini"><span class="l"><span style="font-family:monospace;letter-spacing:.5px">' +
+              e(c.code) + "</span>" +
+              '<br><span style="color:var(--encre-tres-douce);font-size:12px">' +
+                e(nomAtelier[c.utilise_par] || "Atelier supprimé") + " · " +
+                Utils.fmtDateHeure(c.utilise_le) + "</span></span>" +
+              '<span class="v" style="color:var(--vert);font-size:12px">Consommé</span>' +
+            "</div>").join("") +
+          (utilises.length > 60
+            ? '<p style="margin:6px 0 0;font-size:12px;color:var(--encre-tres-douce);text-align:center">' +
+              (utilises.length - 60) + " plus anciens non affichés</p>"
+            : "") +
+          "</div></div>"
+        : "");
+
+    /* Génération d'un lot */
+    const ouvrirGeneration = () => {
+      const corps = UI.ouvrirFeuille("Générer des codes",
+        '<div class="carte">' +
+          '<div class="champ"><label for="cd-nombre">Combien de codes ?</label>' +
+            '<input id="cd-nombre" inputmode="numeric" autocomplete="off" value="10">' +
+            '<div class="aide">Entre 1 et 200. Chaque code vaut un mois d\'abonnement.</div></div>' +
+          '<div class="champ"><label for="cd-lot">Étiquette du lot (facultatif)</label>' +
+            '<input id="cd-lot" autocomplete="off" placeholder="ex. Commercial Awa, septembre">' +
+            '<div class="aide">Pour retrouver plus tard à qui vous avez confié ces codes.</div></div>' +
+          '<button type="button" class="btn btn-bloc" id="cd-ok">' +
+            UI.icone("check", "ic-sm") + "Générer</button>" +
+        "</div>");
+
+      UI.$("#cd-ok", corps).onclick = async () => {
+        const bouton = UI.$("#cd-ok", corps);
+        const nombre = Math.round(Utils.lireNombre(UI.$("#cd-nombre", corps).value));
+        if (nombre < 1 || nombre > 200) {
+          UI.toast("Indiquez un nombre entre 1 et 200", "erreur");
+          return;
+        }
+        bouton.disabled = true;
+        try {
+          const nouveaux = await Api.rpc("generer_codes", {
+            p_nombre: nombre,
+            p_lot: UI.$("#cd-lot", corps).value.trim(),
+          });
+          UI.feuilleSansRappel();
+          UI.fermerFeuille();
+          UI.toast(nouveaux.length + " code" + (nouveaux.length > 1 ? "s" : "") + " généré" +
+            (nouveaux.length > 1 ? "s" : ""), "ok");
+          codes(vue);
+        } catch (err) {
+          UI.toast(err.message || "Génération impossible", "erreur");
+          bouton.disabled = false;
+        }
+      };
+    };
+    UI.$("#cd-generer").onclick = ouvrirGeneration;
+    UI.$("#cd-nouveau").onclick = ouvrirGeneration;
+
+    /* Copie de tous les codes disponibles */
+    const boutonCopier = UI.$("#cd-copier");
+    if (boutonCopier) {
+      boutonCopier.onclick = async () => {
+        const texte = libres.map((c) => c.code).join("\n");
+        try {
+          await navigator.clipboard.writeText(texte);
+          UI.toast(libres.length + " codes copiés", "ok");
+        } catch (_) {
+          Utils.telecharger("codes-atelier.txt", texte);
+          UI.toast("Codes téléchargés", "ok");
+        }
+      };
+    }
+
+    /* Suppression d'un code non utilisé */
+    vue.addEventListener("click", async (ev) => {
+      const bouton = ev.target.closest("[data-suppr-code]");
+      if (!bouton) return;
+      const ok = await UI.confirmer({
+        titre: "Supprimer le code",
+        texte: "Ce code ne pourra plus être utilisé par personne.",
+        bouton: "Supprimer", danger: true,
+      });
+      if (!ok) return;
+      await Api.supprimerLigne("codes_abonnement", bouton.dataset.supprCode);
+      UI.toast("Code supprimé", "ok");
+      codes(vue);
+    });
+  }
+
+  /* ---------- Bannières du carrousel d\'accueil ---------- */
 
   /** Complète une adresse saisie sans protocole. */
   function normaliserLien(lien) {
@@ -738,6 +878,18 @@ const VueSuperAdmin = (() => {
       "</button>" +
 
       '<button type="button" class="carte" style="width:100%;text-align:left;display:flex;align-items:center;' +
+          'gap:12px;border:0;font:inherit;cursor:pointer" data-nav="#/codes">' +
+        '<span class="pastille">' + UI.icone("check", "ic-sm") + "</span>" +
+        '<span style="flex:1;min-width:0">' +
+          '<span class="ligne-titre">Codes de renouvellement</span>' +
+          '<span class="ligne-sous">' +
+            (stats ? stats.codes_disponibles + " disponibles · " + stats.codes_utilises + " utilisés"
+                   : "À vendre aux ateliers") + "</span>" +
+        "</span>" +
+        UI.icone("retour", "ic-sm") +
+      "</button>" +
+
+      '<button type="button" class="carte" style="width:100%;text-align:left;display:flex;align-items:center;' +
           'gap:12px;border:0;font:inherit;cursor:pointer" data-nav="#/bannieres">' +
         '<span class="pastille">' + UI.icone("image", "ic-sm") + "</span>" +
         '<span style="flex:1;min-width:0">' +
@@ -807,5 +959,5 @@ const VueSuperAdmin = (() => {
     };
   }
 
-  return { liste, formulaire, fiche, compte, paiements, bannieres, formulaireBanniere };
+  return { liste, formulaire, fiche, compte, paiements, codes, bannieres, formulaireBanniere };
 })();

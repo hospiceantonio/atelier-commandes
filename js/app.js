@@ -34,6 +34,7 @@
     { motif: /^\/atelier-gere\/([^/]+)$/, vue: (v, m) => VueSuperAdmin.fiche(v, m[1]) },
     { motif: /^\/reglages$/, vue: (v) => VueSuperAdmin.compte(v) },
     { motif: /^\/paiements$/, vue: (v) => VueSuperAdmin.paiements(v) },
+    { motif: /^\/codes$/, vue: (v) => VueSuperAdmin.codes(v) },
     { motif: /^\/bannieres$/, vue: (v) => VueSuperAdmin.bannieres(v) },
     { motif: /^\/banniere\/nouvelle$/, vue: (v) => VueSuperAdmin.formulaireBanniere(v) },
     { motif: /^\/banniere\/([^/]+)$/, vue: (v, m) => VueSuperAdmin.formulaireBanniere(v, m[1]) },
