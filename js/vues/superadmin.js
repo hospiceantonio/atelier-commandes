@@ -506,6 +506,107 @@ const VueSuperAdmin = (() => {
         "les renouvellements « + 1 mois » sont ceux que vous encaissez vous-même.</p>";
   }
 
+  /** Tableau de bord au format A4 : indicateurs puis état des ateliers. */
+  function tableauBordA4(stats, ateliers, devise, profil) {
+    const m = (v) => Utils.fmtMontant(v, devise);
+    const jourFin = (a) => Utils.fmtDate(Utils.isoJour(new Date(a.abonnement_fin)));
+    const tries = ateliers.slice().sort((x, y) => finAbonnement(y) - finAbonnement(x));
+    const actifs = tries.filter(actif);
+
+    const bloc = (l, v, n, couleur) =>
+      "<div class='case'><div class='l'>" + e(l) + "</div>" +
+      "<div class='v'" + (couleur ? " style='color:" + couleur + "'" : "") + ">" + v + "</div>" +
+      "<div class='n'>" + e(n) + "</div></div>";
+
+    return (
+      "<!DOCTYPE html><html lang='fr'><head><meta charset='utf-8'>" +
+      "<title>Tableau de bord Atelier</title><style>" +
+      "@page{size:A4;margin:15mm}" +
+      "*{box-sizing:border-box}" +
+      "body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;color:#141636;font-size:11pt;line-height:1.45}" +
+      ".entete{display:flex;align-items:flex-end;border-bottom:2px solid #2E3192;padding-bottom:5mm}" +
+      ".marque{flex:1}.marque h1{margin:0;font-size:20pt;color:#2E3192;letter-spacing:-.5px}" +
+      ".marque p{margin:1mm 0 0;font-size:10pt;color:#5b5f7d}" +
+      ".titre{text-align:right}.titre h2{margin:0;font-size:13pt;letter-spacing:1px}" +
+      ".titre p{margin:1mm 0 0;font-size:10pt;color:#5b5f7d}" +
+      ".resume{display:flex;gap:3.5mm;margin:6mm 0 0}" +
+      ".resume.petit .v{font-size:12.5pt}" +
+      ".case{flex:1;border:1px solid #e3e5f0;border-radius:2mm;padding:3.5mm}" +
+      ".case .l{font-size:9pt;text-transform:uppercase;letter-spacing:.8px;color:#5b5f7d}" +
+      ".case .v{font-size:15pt;font-weight:750;margin-top:1mm}" +
+      ".case .n{font-size:8.5pt;color:#8b8fa8;margin-top:.5mm}" +
+      "h3{margin:8mm 0 2mm;font-size:11pt;color:#2E3192;text-transform:uppercase;letter-spacing:.8px}" +
+      "table{width:100%;border-collapse:collapse}" +
+      "thead{display:table-header-group}" +
+      "th{text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#5b5f7d;" +
+        "border-bottom:1.5px solid #2E3192;padding:2mm}" +
+      "td{padding:2mm;border-bottom:1px solid #e9eaf3;font-size:10.5pt}" +
+      "tr{page-break-inside:avoid}" +
+      "td.num,th.num{text-align:right;white-space:nowrap}" +
+      "td.etat{white-space:nowrap;font-weight:700}" +
+      ".pied{margin-top:8mm;border-top:1px solid #e3e5f0;padding-top:3mm;font-size:9.5pt;" +
+        "color:#5b5f7d;display:flex;justify-content:space-between}" +
+      "</style></head><body>" +
+
+      "<div class='entete'>" +
+        "<div class='marque'><h1>Atelier</h1>" +
+          "<p>Plateforme de gestion pour ateliers de couture</p></div>" +
+        "<div class='titre'><h2>TABLEAU DE BORD</h2>" +
+          "<p>Édité le " + e(Utils.fmtDate(Utils.aujourdhui())) + "</p>" +
+          "<p>" + e(profil ? (profil.nom_complet || profil.email) : "") + "</p></div>" +
+      "</div>" +
+
+      "<div class='resume'>" +
+        bloc("Ateliers", stats.ateliers,
+          stats.ateliers_actifs + " actif" + (stats.ateliers_actifs > 1 ? "s" : "") +
+          (stats.ateliers_mois ? " · " + stats.ateliers_mois + " ce mois" : ""), "") +
+        bloc("Encaissé ce mois", m(stats.encaisse_mois),
+          stats.renouvellements + " renouvellement" + (stats.renouvellements > 1 ? "s" : "") + " au total", "#0F9D58") +
+        bloc("Total encaissé", m(stats.encaisse_total), "depuis le début", "#0F9D58") +
+      "</div>" +
+
+      "<div class='resume petit'>" +
+        bloc("Réalisations", stats.realisations, stats.realisations_en_avant + " à la une", "") +
+        bloc("Commandes livrées", stats.commandes_livrees,
+          "sur " + stats.commandes + " commande" + (stats.commandes > 1 ? "s" : ""), "") +
+        bloc("Factures éditées", stats.factures, m(stats.factures_montant) + " vendus", "") +
+        bloc("Clients suivis", stats.clients, "tous ateliers confondus", "") +
+      "</div>" +
+
+      "<div class='resume petit'>" +
+        bloc("Comptes", stats.administrateurs + stats.moderateurs,
+          stats.administrateurs + " admin · " + stats.moderateurs + " modérateur" +
+          (stats.moderateurs > 1 ? "s" : ""), "") +
+        bloc("Codes disponibles", stats.codes_disponibles || 0,
+          (stats.codes_utilises || 0) + " déjà utilisés", "") +
+        bloc("Bannières actives", stats.bannieres || 0, "sur l'accueil public", "") +
+        bloc("Revenu mensuel attendu", m(actifs.reduce((t, a) => t + (Number(a.abonnement_mensuel) || 0), 0)),
+          "si tous les actifs renouvellent", "#2E3192") +
+      "</div>" +
+
+      "<h3>Ateliers (" + tries.length + ")</h3>" +
+      (tries.length
+        ? "<table><thead><tr><th>Atelier</th><th class='num'>Abonnement</th>" +
+            "<th class='num'>Échéance</th><th class='num'>État</th></tr></thead><tbody>" +
+          tries.map((a) => {
+            const enCours = actif(a);
+            const jours = Math.ceil((finAbonnement(a) - Date.now()) / 86400000);
+            return "<tr><td>" + e(a.nom) + "</td>" +
+              "<td class='num'>" + Utils.fmtMontant(a.abonnement_mensuel, a.devise) + " / mois</td>" +
+              "<td class='num'>" + e(jourFin(a)) + "</td>" +
+              "<td class='etat num' style='color:" + (enCours ? "#0F9D58" : "#D33A2C") + "'>" +
+                (enCours ? (jours <= 5 ? jours + " j restants" : "Actif") : "Expiré") + "</td></tr>";
+          }).join("") +
+          "</tbody></table>"
+        : "<p style='color:#8b8fa8'>Aucun atelier enregistré.</p>") +
+
+      "<div class='pied'><span>Atelier — tableau de bord de la plateforme</span>" +
+        "<span>" + stats.ateliers_actifs + " atelier" + (stats.ateliers_actifs > 1 ? "s" : "") +
+        " en activité</span></div>" +
+      "</body></html>"
+    );
+  }
+
   /* ---------- Codes de renouvellement ---------- */
 
   async function codes(vue) {
@@ -849,7 +950,15 @@ const VueSuperAdmin = (() => {
       stats = await Api.rpc("statistiques_plateforme");
     } catch (_) { /* base pas encore à jour : le tableau de bord attend */ }
 
-    UI.entete({ titre: "Tableau de bord", sous: "Superadministrateur", retour: true });
+    UI.entete({
+      titre: "Tableau de bord",
+      sous: "Superadministrateur",
+      retour: true,
+      actions: stats
+        ? '<button type="button" class="btn-ic" id="tb-imprimer" aria-label="Imprimer le tableau de bord">' +
+            UI.icone("telecharger") + "</button>"
+        : "",
+    });
     vue.innerHTML =
       (stats
         ? tuilesTableauBord(stats, devise)
@@ -935,6 +1044,15 @@ const VueSuperAdmin = (() => {
 
       '<button type="button" class="btn btn-danger btn-bloc" id="sa-deconnexion">Se déconnecter</button>';
 
+    const boutonImprimer = UI.$("#tb-imprimer");
+    if (boutonImprimer) {
+      boutonImprimer.onclick = () => {
+        UI.choisirImpression("Tableau de bord — " + Utils.fmtDate(Utils.aujourdhui()),
+          () => Utils.imprimerA4("Tableau de bord Atelier",
+            tableauBordA4(stats, ateliers, devise, profil)));
+      };
+    }
+
     const formulaireKkiapay = UI.$("#form-kkiapay");
     if (formulaireKkiapay) {
       formulaireKkiapay.addEventListener("submit", async (ev) => {
@@ -959,5 +1077,6 @@ const VueSuperAdmin = (() => {
     };
   }
 
-  return { liste, formulaire, fiche, compte, paiements, codes, bannieres, formulaireBanniere };
+  return { liste, formulaire, fiche, compte, paiements, codes, bannieres, formulaireBanniere,
+           tableauBordA4 };
 })();

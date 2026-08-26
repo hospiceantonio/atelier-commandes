@@ -104,6 +104,36 @@ const UI = (() => {
 
   function feuilleSansRappel() { feuilleAuFermer = null; }
 
+  /**
+   * Propose d'imprimer ou d'exporter en PDF, puis lance le document.
+   * Les deux passent par le même dialogue système : c'est là que la
+   * destination se choisit. Le rappel guide vers « Enregistrer en PDF ».
+   */
+  function choisirImpression(titre, lancer) {
+    const corps = ouvrirFeuille(titre,
+      '<button type="button" class="ligne" data-sortie="imprimer">' +
+        '<span class="pastille">' + icone("telecharger", "ic-sm") + "</span>" +
+        '<span class="ligne-corps"><span class="ligne-titre">Imprimer directement</span>' +
+          '<span class="ligne-sous">Vers une imprimante connectée</span></span>' +
+      "</button>" +
+      '<button type="button" class="ligne" style="margin-top:10px" data-sortie="pdf">' +
+        '<span class="pastille">' + icone("commandes", "ic-sm") + "</span>" +
+        '<span class="ligne-corps"><span class="ligne-titre">Exporter en PDF</span>' +
+          "<span class=\"ligne-sous\">Pour l'envoyer ou l'archiver</span></span>" +
+      "</button>");
+
+    corps.addEventListener("click", (ev) => {
+      const choix = ev.target.closest("[data-sortie]");
+      if (!choix) return;
+      feuilleSansRappel();
+      fermerFeuille();
+      lancer();
+      if (choix.dataset.sortie === "pdf") {
+        toast("Choisissez « Enregistrer au format PDF » comme destination", "ok");
+      }
+    });
+  }
+
   /* ---------- Composants ---------- */
 
   function badgeStatut(commande) {
@@ -218,7 +248,7 @@ const UI = (() => {
 
   return {
     $, $$, entete, icone, toast,
-    ouvrirFeuille, fermerFeuille, feuilleSansRappel, confirmer,
+    ouvrirFeuille, fermerFeuille, feuilleSansRappel, confirmer, choisirImpression,
     ouvrirVisionneuse, fermerVisionneuse,
     badgeStatut, pastilleClient, ligneCommande, vide,
     champMontant, grilleMesures, lireGrilleMesures, lectureMesures,

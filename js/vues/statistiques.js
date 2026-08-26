@@ -35,32 +35,6 @@ const VueStats = (() => {
     return "Du " + Utils.fmtDate(b.debut) + " au " + Utils.fmtDate(b.fin);
   }
 
-  /** Propose l'impression directe ou l'export PDF, puis lance le document. */
-  function choisirImpression(titre, lancer) {
-    const corps = UI.ouvrirFeuille(titre,
-      '<button type="button" class="ligne" data-sortie="imprimer">' +
-        '<span class="pastille">' + UI.icone("telecharger", "ic-sm") + "</span>" +
-        '<span class="ligne-corps"><span class="ligne-titre">Imprimer directement</span>' +
-          '<span class="ligne-sous">Vers une imprimante connectée</span></span>' +
-      "</button>" +
-      '<button type="button" class="ligne" style="margin-top:10px" data-sortie="pdf">' +
-        '<span class="pastille">' + UI.icone("commandes", "ic-sm") + "</span>" +
-        '<span class="ligne-corps"><span class="ligne-titre">Exporter en PDF</span>' +
-          '<span class="ligne-sous">Pour l\'envoyer ou l\'archiver</span></span>' +
-      "</button>");
-
-    corps.addEventListener("click", (ev) => {
-      const choix = ev.target.closest("[data-sortie]");
-      if (!choix) return;
-      UI.feuilleSansRappel();
-      UI.fermerFeuille();
-      lancer();
-      if (choix.dataset.sortie === "pdf") {
-        UI.toast("Choisissez « Enregistrer au format PDF » comme destination", "ok");
-      }
-    });
-  }
-
   async function afficher(vue) {
     UI.entete({ titre: "Recettes & Dépenses", sous: "Chaque versement compte le jour où il est reçu" });
 
@@ -209,7 +183,7 @@ const VueStats = (() => {
 
       /* Ajout d'une dépense */
       UI.$("#btn-point").onclick = () => {
-        choisirImpression("Récapitulatif — " + libellePeriode(periodeActive, b),
+        UI.choisirImpression("Récapitulatif — " + libellePeriode(periodeActive, b),
           () => Store.imprimerRapport(stats, b, libellePeriode(periodeActive, b)));
       };
 
@@ -218,7 +192,7 @@ const VueStats = (() => {
         boutonJournal.onclick = () => {
           const nomParClient = {};
           for (const [id, c] of parId) nomParClient[id] = Utils.nomComplet(c);
-          choisirImpression("Journal des versements — " + libellePeriode(periodeActive, b),
+          UI.choisirImpression("Journal des versements — " + libellePeriode(periodeActive, b),
             () => Store.imprimerJournal(stats, libellePeriode(periodeActive, b), nomParClient));
         };
       }
