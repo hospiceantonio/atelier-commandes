@@ -19,6 +19,9 @@
     { motif: /^\/commande\/([^/]+)$/, vue: (v, m) => VueCommandes.detail(v, m[1]) },
     { motif: /^\/statistiques$/, vue: (v) => VueStats.afficher(v), onglet: "/statistiques" },
     { motif: /^\/reglages$/, vue: (v) => VueReglages.afficher(v) },
+    { motif: /^\/produits$/, vue: (v) => VueProduits.liste(v), onglet: "/produits" },
+    { motif: /^\/produit-gere\/nouveau$/, vue: (v) => VueProduits.formulaire(v) },
+    { motif: /^\/produit-gere\/([^/]+)$/, vue: (v, m) => VueProduits.formulaire(v, m[1]) },
   ];
 
   const ROUTES_SUPERADMIN = [
@@ -27,6 +30,44 @@
     { motif: /^\/atelier-gere\/([^/]+)$/, vue: (v, m) => VueSuperAdmin.fiche(v, m[1]) },
     { motif: /^\/reglages$/, vue: (v) => VueSuperAdmin.compte(v) },
   ];
+
+  /* Boutique publique : visible sans compte. */
+  const ROUTES_PUBLIQUES = [
+    { motif: /^\/$/, vue: (v) => VueBoutique.accueil(v), onglet: "/" },
+    { motif: /^\/produit\/([^/]+)$/, vue: (v, m) => VueBoutique.produit(v, m[1]) },
+    { motif: /^\/ateliers$/, vue: (v) => VueBoutique.ateliers(v), onglet: "/ateliers" },
+    { motif: /^\/atelier\/([^/]+)$/, vue: (v, m) => VueBoutique.atelier(v, m[1]) },
+  ];
+
+  /* Onglets selon le contexte. Le superadmin n'en a pas (tabbar cachée). */
+  const ONGLETS_PUBLICS = [
+    { href: "#/", tab: "/", icone: "boutique", label: "Accueil" },
+    { href: "#/ateliers", tab: "/ateliers", icone: "clients", label: "Ateliers" },
+    { href: "#/connexion", tab: "/connexion", icone: "connexion", label: "Se connecter" },
+  ];
+
+  const ONGLETS_ADMIN = [
+    { href: "#/", tab: "/", icone: "accueil", label: "Accueil" },
+    { href: "#/commandes", tab: "/commandes", icone: "commandes", label: "Commandes" },
+    { href: "#/commande/nouvelle", cta: true, label: "Nouvelle commande" },
+    { href: "#/produits", tab: "/produits", icone: "boutique", label: "Vitrine" },
+    { href: "#/clients", tab: "/clients", icone: "clients", label: "Clients" },
+    { href: "#/statistiques", tab: "/statistiques", icone: "stats", label: "Recettes" },
+  ];
+
+  let ongletsRendus = null;
+
+  function rendreTabbar(onglets, cle) {
+    if (ongletsRendus === cle) return;
+    ongletsRendus = cle;
+    document.getElementById("tabbar").innerHTML = onglets.map((o) =>
+      o.cta
+        ? '<a href="' + o.href + '" class="tab-cta" aria-label="' + Utils.echapper(o.label) + '">' +
+            '<span class="tab-cta-rond">' + UI.icone("plus") + "</span></a>"
+        : '<a href="' + o.href + '" data-tab="' + o.tab + '">' + UI.icone(o.icone) +
+            "<span>" + Utils.echapper(o.label) + "</span></a>"
+    ).join("");
+  }
 
   function lireHash() {
     const brut = location.hash.replace(/^#/, "") || "/";
@@ -74,10 +115,11 @@
     afficherVoile(boiteVoile(
       "Compte non activé",
       "Ce compte n'est relié à aucun atelier. Contactez votre fournisseur pour l'activer.",
-      '<button type="button" class="btn btn-bloc" id="voile-deconnexion">Se déconnecter</button>'
+      '<button type="button" class="btn btn-bloc" id="voile-deconnexion">Retour à la boutique</button>'
     ));
     document.getElementById("voile-deconnexion").onclick = async () => {
       await Api.deconnexion();
+      location.hash = "#/";
       naviguer();
     };
   }
@@ -109,6 +151,7 @@
     };
     document.getElementById("voile-deconnexion").onclick = async () => {
       await Api.deconnexion();
+      location.hash = "#/";
       naviguer();
     };
   }
@@ -125,20 +168,31 @@
     UI.fermerFeuille();
     UI.fermerVisionneuse();
 
+    const { chemin: cheminDemande } = lireHash();
+
+    /* Visiteur : boutique publique, et connexion à la demande. */
     if (!Api.connecte()) {
       document.body.classList.remove("mode-superadmin");
-      vue.innerHTML = "";
-      // Ne pas re-rendre si un formulaire de connexion ou d'inscription est
-      // déjà affiché : un second rendu (hash + appel direct) effacerait la
-      // saisie en cours.
-      if (!document.getElementById("form-connexion") && !document.getElementById("form-inscription")) {
-        VueConnexion.afficher();
+      rendreTabbar(ONGLETS_PUBLICS, "public");
+      if (cheminDemande === "/connexion") {
+        vue.innerHTML = "";
+        marquerOnglet("/connexion");
+        // Ne pas re-rendre si un formulaire de connexion ou d'inscription est
+        // déjà affiché : un second rendu (hash + appel direct) effacerait la
+        // saisie en cours.
+        if (!document.getElementById("form-connexion") && !document.getElementById("form-inscription")) {
+          VueConnexion.afficher();
+        }
+        return;
       }
+      masquerVoile();
+      await rendreRoute(ROUTES_PUBLIQUES, vue, "#/");
       return;
     }
 
     const superadmin = Api.role() === "superadmin";
     document.body.classList.toggle("mode-superadmin", superadmin);
+    if (!superadmin) rendreTabbar(ONGLETS_ADMIN, "admin");
 
     if (!superadmin) {
       if (!Api.lireProfil() || !Api.atelierId() || !Api.lireAtelier()) {
@@ -152,17 +206,24 @@
     }
     masquerVoile();
 
-    const routes = superadmin ? ROUTES_SUPERADMIN : ROUTES_ADMIN;
+    await rendreRoute(superadmin ? ROUTES_SUPERADMIN : ROUTES_ADMIN, vue, "#/");
+  }
+
+  function marquerOnglet(onglet) {
+    for (const lien of document.querySelectorAll("#tabbar [data-tab]")) {
+      lien.classList.toggle("actif", lien.dataset.tab === (onglet || ""));
+    }
+  }
+
+  async function rendreRoute(routes, vue, secours) {
     const { chemin, params } = lireHash();
     const route = routes.find((r) => r.motif.test(chemin));
     if (!route) {
-      location.hash = "#/";
+      location.hash = secours;
       return;
     }
 
-    for (const lien of document.querySelectorAll("#tabbar [data-tab]")) {
-      lien.classList.toggle("actif", lien.dataset.tab === (route.onglet || ""));
-    }
+    marquerOnglet(route.onglet);
 
     try {
       await route.vue(vue, chemin.match(route.motif), params);

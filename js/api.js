@@ -37,13 +37,20 @@ const Api = (() => {
     const { data } = await client.auth.getSession();
     session = (data && data.session) || null;
     if (session) await chargerContexte();
+    else await chargerParametres();
+  }
+
+  /** Les paramètres sont publics (clé KKiaPay, contact) : lisibles sans compte. */
+  async function chargerParametres() {
+    const { data: prm } = await client.from("parametres").select("*").eq("id", 1).single();
+    parametres = prm || null;
   }
 
   async function chargerContexte() {
     profil = null;
     atelier = null;
-    parametres = null;
     if (!session) return;
+    await chargerParametres();
     const { data: p } = await client.from("profils").select("*").eq("id", session.user.id).single();
     if (!p) return;
     profil = p;
@@ -51,9 +58,6 @@ const Api = (() => {
       const { data: a } = await client.from("ateliers").select("*").eq("id", p.atelier_id).single();
       atelier = a || null;
     }
-    // Réglages de paiement (absents tant que la base n'est pas à jour).
-    const { data: prm } = await client.from("parametres").select("*").eq("id", 1).single();
-    parametres = prm || null;
   }
 
   const connecte = () => !!session;

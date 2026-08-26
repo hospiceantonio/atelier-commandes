@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5">
-<title>Atelier — Gestion des commandes</title>
-<meta name="description" content="Gestion des commandes, clients, mesures et recettes pour les ateliers de couture.">
+<title>Atelier — Réalisations et gestion des ateliers de couture</title>
+<meta name="description" content="Découvrez et commandez les réalisations des ateliers de couture ; gestion des commandes, clients, mesures et recettes pour les ateliers.">
 <meta name="theme-color" content="#1B1C5C">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -43,6 +43,8 @@
     <g id="i-televerser"><path d="M12 21V9M7.5 13.5 12 9l4.5 4.5"/><path d="M4 4h16"/></g>
     <g id="i-horloge"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.5l3.5 2"/></g>
     <g id="i-alerte"><path d="M12 3.5 22 20H2z"/><path d="M12 10v4.5M12 17.2h.01"/></g>
+    <g id="i-connexion"><circle cx="12" cy="8" r="3.7"/><path d="M4.5 20.5c0-4 3.4-6.6 7.5-6.6s7.5 2.6 7.5 6.6"/></g>
+    <g id="i-boutique"><path d="M4 9.5 5.5 4h13L20 9.5"/><path d="M4 9.5a2.6 2.6 0 0 0 5.3 0 2.65 2.65 0 0 0 5.4 0 2.6 2.6 0 0 0 5.3 0"/><path d="M5 12v8h14v-8"/><path d="M9.5 20v-5h5v5"/></g>
   </defs>
 </svg>
 
@@ -50,13 +52,7 @@
 
 <main id="vue" class="vue" tabindex="-1"></main>
 
-<nav class="tabbar" id="tabbar" aria-label="Navigation principale">
-  <a href="#/" data-tab="/"><svg class="ic" viewBox="0 0 24 24"><use href="#i-accueil"/></svg><span>Accueil</span></a>
-  <a href="#/commandes" data-tab="/commandes"><svg class="ic" viewBox="0 0 24 24"><use href="#i-commandes"/></svg><span>Commandes</span></a>
-  <a href="#/commande/nouvelle" class="tab-cta" aria-label="Nouvelle commande"><span class="tab-cta-rond"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></span></a>
-  <a href="#/clients" data-tab="/clients"><svg class="ic" viewBox="0 0 24 24"><use href="#i-clients"/></svg><span>Clients</span></a>
-  <a href="#/statistiques" data-tab="/statistiques"><svg class="ic" viewBox="0 0 24 24"><use href="#i-stats"/></svg><span>Recettes</span></a>
-</nav>
+<nav class="tabbar" id="tabbar" aria-label="Navigation principale"></nav>
 
 <div id="feuille" class="feuille" hidden>
   <div class="feuille-fond" data-action="fermer-feuille"></div>
@@ -99,6 +95,8 @@
 <script src="js/vues/commandes.js"></script>
 <script src="js/vues/statistiques.js"></script>
 <script src="js/vues/reglages.js"></script>
+<script src="js/vues/produits.js"></script>
+<script src="js/vues/boutique.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

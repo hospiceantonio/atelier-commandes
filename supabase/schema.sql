@@ -371,3 +371,83 @@ $$;
 revoke all on function public.prolonger_abonnement_kkiapay(uuid, text, numeric)
   from public, anon, authenticated;
 grant execute on function public.prolonger_abonnement_kkiapay(uuid, text, numeric) to service_role;
+
+-- =========================================================
+-- Vitrine publique : réalisations (produits) des ateliers
+-- =========================================================
+
+-- Numéro WhatsApp du superadministrateur, affiché sur la page de
+-- connexion (« Vous êtes un atelier ou un styliste ? Enregistrez-vous »).
+alter table public.parametres add column if not exists contact_whatsapp text not null default '';
+
+-- La page publique (visiteurs non connectés) lit les paramètres :
+-- ils ne contiennent que des valeurs publiques par conception.
+drop policy if exists parametres_lecture on public.parametres;
+create policy parametres_lecture on public.parametres for select to anon, authenticated
+  using (true);
+
+create table if not exists public.produits (
+  id           uuid primary key default gen_random_uuid(),
+  atelier_id   uuid not null references public.ateliers (id) on delete cascade,
+  nom          text not null,
+  code         text not null default '',
+  categorie    text not null default 'Autres',
+  prix         numeric not null default 0,
+  prix_visible boolean not null default true,
+  couverture   text not null default '',  -- miniature (data-url) pour les listes
+  cree_le      timestamptz not null default now(),
+  modifie_le   timestamptz not null default now()
+);
+
+create table if not exists public.photos_produits (
+  id         uuid primary key default gen_random_uuid(),
+  atelier_id uuid not null references public.ateliers (id) on delete cascade,
+  produit_id uuid not null references public.produits (id) on delete cascade,
+  data_url   text not null,
+  position   integer not null default 0,
+  cree_le    timestamptz not null default now()
+);
+
+create index if not exists produits_par_atelier on public.produits (atelier_id);
+create index if not exists photos_produits_par_produit on public.photos_produits (produit_id);
+
+-- Un atelier est « actif » quand son abonnement est à jour : seules les
+-- vitrines des ateliers actifs sont visibles du public.
+create or replace function public.atelier_actif(p_atelier uuid)
+returns boolean language sql stable security definer set search_path = public as
+$$ select exists (select 1 from public.ateliers where id = p_atelier and abonnement_fin > now()) $$;
+
+alter table public.produits enable row level security;
+alter table public.photos_produits enable row level security;
+
+drop policy if exists produits_lecture_publique on public.produits;
+create policy produits_lecture_publique on public.produits for select to anon, authenticated
+  using (public.atelier_actif(atelier_id)
+         or atelier_id = public.atelier_courant()
+         or public.role_courant() = 'superadmin');
+
+drop policy if exists produits_gestion on public.produits;
+create policy produits_gestion on public.produits for all to authenticated
+  using (atelier_id = public.atelier_courant())
+  with check (atelier_id = public.atelier_courant());
+
+drop policy if exists photos_produits_lecture_publique on public.photos_produits;
+create policy photos_produits_lecture_publique on public.photos_produits for select to anon, authenticated
+  using (public.atelier_actif(atelier_id)
+         or atelier_id = public.atelier_courant()
+         or public.role_courant() = 'superadmin');
+
+drop policy if exists photos_produits_gestion on public.photos_produits;
+create policy photos_produits_gestion on public.photos_produits for all to authenticated
+  using (atelier_id = public.atelier_courant())
+  with check (atelier_id = public.atelier_courant());
+
+-- Vue publique des ateliers actifs : uniquement les colonnes vitrines
+-- (jamais l'abonnement). La vue appartient à postgres et ignore le RLS
+-- de la table : c'est voulu, elle borne elle-même ce qu'elle expose.
+create or replace view public.ateliers_publics as
+  select id, nom, slogan, logo, tel_whatsapp, tel_appel, devise, indicatif
+  from public.ateliers
+  where abonnement_fin > now();
+
+grant select on public.ateliers_publics to anon, authenticated;

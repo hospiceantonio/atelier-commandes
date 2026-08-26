@@ -7,6 +7,26 @@
    ========================================================= */
 const VueConnexion = (() => {
 
+  /* Invitation à rejoindre la plateforme : renvoie vers le WhatsApp du
+     superadministrateur, réglé dans « Mon compte ». */
+  function invitationEnregistrement() {
+    const prm = Api.lireParametres();
+    const numero = prm && prm.contact_whatsapp ? prm.contact_whatsapp : "";
+    const texte = "Vous êtes un atelier ou un styliste ?";
+    if (!numero) {
+      return '<p class="voile-contact">' + texte + " Contactez-nous pour ouvrir votre compte.</p>";
+    }
+    const message = "Bonjour 👋 Je suis un atelier / styliste et je souhaite " +
+      "enregistrer mon atelier sur l'application Atelier.";
+    return (
+      '<p class="voile-contact" style="margin-top:18px">' + texte + "<br>" +
+        '<a href="' + Utils.lienWhatsApp(numero, message, "229") + '" target="_blank" rel="noopener" ' +
+          'style="font-weight:700;color:var(--vert);text-decoration:underline">' +
+          "Enregistrez-vous dès maintenant</a>" +
+      "</p>"
+    );
+  }
+
   function afficher() {
     const voile = document.getElementById("voile-licence");
     document.body.classList.remove("mode-superadmin");
@@ -24,7 +44,8 @@ const VueConnexion = (() => {
             '<input id="cx-mdp" type="password" autocomplete="current-password" required></div>' +
           '<button type="submit" class="btn btn-bloc" id="cx-bouton">Se connecter</button>' +
         "</form>" +
-        '<p class="voile-contact">Pas de compte ? Il est créé pour vous par votre fournisseur.</p>' +
+        invitationEnregistrement() +
+        '<p class="voile-contact"><a href="#" id="cx-retour-boutique" style="text-decoration:underline">← Retour à la boutique</a></p>' +
         '<p class="voile-contact"><a href="#" id="cx-inscription" style="text-decoration:underline">Première installation : créer un compte</a></p>' +
       "</div>";
     voile.hidden = false;
@@ -40,6 +61,7 @@ const VueConnexion = (() => {
           document.getElementById("cx-mdp").value
         );
         masquer();
+        location.hash = "#/";
         window.AppNaviguer();
       } catch (err) {
         UI.toast(err.message || "Connexion impossible", "erreur");
@@ -50,6 +72,13 @@ const VueConnexion = (() => {
     document.getElementById("cx-inscription").addEventListener("click", (ev) => {
       ev.preventDefault();
       afficherInscription();
+    });
+
+    document.getElementById("cx-retour-boutique").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      masquer();
+      location.hash = "#/";
+      window.AppNaviguer();
     });
   }
 

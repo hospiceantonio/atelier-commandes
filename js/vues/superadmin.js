@@ -425,6 +425,14 @@ const VueSuperAdmin = (() => {
       (prm
         ? '<form id="form-kkiapay">' +
             '<div class="carte">' +
+              '<div class="carte-titre">' + UI.icone("whatsapp", "ic-sm") + "Contact affiché au public</div>" +
+              '<div class="champ"><label for="sa-contact">Votre numéro WhatsApp</label>' +
+                '<input id="sa-contact" type="tel" inputmode="tel" autocomplete="off" value="' +
+                  e(prm.contact_whatsapp || "") + '">' +
+                '<div class="aide">Affiché sur la page de connexion : « Vous êtes un atelier ou un ' +
+                  "styliste ? Enregistrez-vous dès maintenant ». Laissez vide pour ne pas l'afficher.</div></div>" +
+            "</div>" +
+            '<div class="carte">' +
               '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Paiement en ligne (KKiaPay)</div>" +
               '<div class="champ"><label for="sa-kkiapay-cle">Clé publique KKiaPay</label>' +
                 '<input id="sa-kkiapay-cle" autocomplete="off" spellcheck="false" value="' + e(prm.kkiapay_cle_publique) + '">' +
@@ -458,8 +466,9 @@ const VueSuperAdmin = (() => {
           await Api.majParametres({
             kkiapay_cle_publique: UI.$("#sa-kkiapay-cle").value.trim(),
             kkiapay_sandbox: UI.$("#sa-kkiapay-sandbox").checked,
+            contact_whatsapp: UI.$("#sa-contact").value.trim(),
           });
-          UI.toast("Réglages de paiement enregistrés", "ok");
+          UI.toast("Réglages enregistrés", "ok");
         } catch (err) {
           UI.toast(err.message || "Enregistrement impossible", "erreur");
         }
