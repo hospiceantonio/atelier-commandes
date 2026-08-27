@@ -12,7 +12,7 @@ const VueConnexion = (() => {
       '<p class="voile-contact" style="margin-top:18px">Vous êtes un atelier ou un styliste ?<br>' +
         '<a href="#" id="cx-inscription" ' +
           'style="font-weight:700;color:var(--vert);text-decoration:underline">' +
-          "Ouvrez votre maison en quelques minutes</a>" +
+          "Cliquez ici pour ouvrir votre compte en quelques minutes</a>" +
       "</p>"
     );
   }
