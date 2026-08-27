@@ -54,7 +54,40 @@ const Store = (() => {
       modeleWhatsAppPret: a.modele_whatsapp_pret || DEFAUTS.modeleWhatsAppPret,
       abonnementMensuel: Number(a.abonnement_mensuel) || 0,
       abonnementFin: a.abonnement_fin || null,
+      formule: a.formule || "atelier_vitrine",
     };
+  }
+
+  /* ---------- Formules ----------
+     Les noms et les tarifs viennent de la base : le superadministrateur
+     les règle sans qu'on touche au code. Ces libellés de secours ne
+     servent que si la table n'a pas encore été créée. */
+
+  const FORMULES_SECOURS = {
+    atelier: "Atelier",
+    vitrine: "Vitrine",
+    atelier_vitrine: "Atelier + Vitrine",
+  };
+
+  const listerFormules = () => Api.listerFormules();
+
+  const libelleFormule = (code, formules) => {
+    const trouvee = (formules || []).find((f) => f.code === code);
+    return (trouvee && trouvee.nom) || FORMULES_SECOURS[code] || code || "—";
+  };
+
+  /** Ce que la formule ouvre — même découpage que module_atelier /
+      module_vitrine côté serveur, qui seul fait foi. */
+  const formuleOuvreAtelier = (code) => ["atelier", "atelier_vitrine"].indexOf(code) >= 0;
+  const formuleOuvreVitrine = (code) => ["vitrine", "atelier_vitrine"].indexOf(code) >= 0;
+
+  function resumeFormule(code) {
+    const a = formuleOuvreAtelier(code);
+    const v = formuleOuvreVitrine(code);
+    if (a && v) return "Commandes sur mesure et boutique publique";
+    if (a) return "Commandes, clients, mesures et recettes — sans boutique publique";
+    if (v) return "Boutique publique, stock et ventes au comptoir";
+    return "";
   }
 
   /** Champs de l'atelier modifiables par son administrateur. */
@@ -784,6 +817,8 @@ const Store = (() => {
 
   return {
     STATUTS, lireReglages, majReglages, bandeauAbonnement, utiliserCode,
+    listerFormules, libelleFormule, resumeFormule,
+    formuleOuvreAtelier, formuleOuvreVitrine,
     listerClients, lireClient, sauverClient, supprimerClient, chercherClients,
     listerCommandes, lireCommande, commandesDuClient, sauverCommande,
     changerStatut, ajouterPaiement, retirerPaiement, supprimerCommande,

@@ -7,25 +7,27 @@
    ========================================================= */
 (() => {
 
+  /* `module` : la formule qui ouvre cet écran. Sans marque, l'écran est
+     ouvert à toutes les formules (accueil, réglages, recettes). */
   const ROUTES_ADMIN = [
     { motif: /^\/$/, vue: (v) => VueAccueil.afficher(v), onglet: "/" },
-    { motif: /^\/clients$/, vue: (v) => VueClients.liste(v), onglet: "/clients" },
-    { motif: /^\/client\/nouveau$/, vue: (v) => VueClients.formulaire(v) },
-    { motif: /^\/client\/([^/]+)\/modifier$/, vue: (v, m) => VueClients.formulaire(v, m[1]) },
-    { motif: /^\/client\/([^/]+)$/, vue: (v, m) => VueClients.fiche(v, m[1]) },
-    { motif: /^\/commandes$/, vue: (v) => VueCommandes.liste(v), onglet: "/commandes" },
-    { motif: /^\/commande\/nouvelle$/, vue: (v, m, p) => VueCommandes.nouvelle(v, p) },
-    { motif: /^\/commande\/([^/]+)\/modifier$/, vue: (v, m) => VueCommandes.modifier(v, m[1]) },
-    { motif: /^\/commande\/([^/]+)$/, vue: (v, m) => VueCommandes.detail(v, m[1]) },
+    { motif: /^\/clients$/, vue: (v) => VueClients.liste(v), onglet: "/clients", module: "atelier" },
+    { motif: /^\/client\/nouveau$/, vue: (v) => VueClients.formulaire(v), module: "atelier" },
+    { motif: /^\/client\/([^/]+)\/modifier$/, vue: (v, m) => VueClients.formulaire(v, m[1]), module: "atelier" },
+    { motif: /^\/client\/([^/]+)$/, vue: (v, m) => VueClients.fiche(v, m[1]), module: "atelier" },
+    { motif: /^\/commandes$/, vue: (v) => VueCommandes.liste(v), onglet: "/commandes", module: "atelier" },
+    { motif: /^\/commande\/nouvelle$/, vue: (v, m, p) => VueCommandes.nouvelle(v, p), module: "atelier" },
+    { motif: /^\/commande\/([^/]+)\/modifier$/, vue: (v, m) => VueCommandes.modifier(v, m[1]), module: "atelier" },
+    { motif: /^\/commande\/([^/]+)$/, vue: (v, m) => VueCommandes.detail(v, m[1]), module: "atelier" },
     { motif: /^\/statistiques$/, vue: (v) => VueStats.afficher(v), onglet: "/statistiques" },
     { motif: /^\/reglages$/, vue: (v) => VueReglages.afficher(v) },
-    { motif: /^\/produits$/, vue: (v) => VueProduits.liste(v), onglet: "/produits" },
+    { motif: /^\/produits$/, vue: (v) => VueProduits.liste(v), onglet: "/produits", module: "vitrine" },
     { motif: /^\/nouveau$/, vue: () => { location.hash = "#/"; menuNouveau(); } },
-    { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v) },
-    { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v) },
-    { motif: /^\/vente\/([^/]+)$/, vue: (v, m) => VueVentes.detail(v, m[1]) },
-    { motif: /^\/produit-gere\/nouveau$/, vue: (v) => VueProduits.formulaire(v) },
-    { motif: /^\/produit-gere\/([^/]+)$/, vue: (v, m) => VueProduits.formulaire(v, m[1]) },
+    { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v), module: "vitrine" },
+    { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v), module: "vitrine" },
+    { motif: /^\/vente\/([^/]+)$/, vue: (v, m) => VueVentes.detail(v, m[1]), module: "vitrine" },
+    { motif: /^\/produit-gere\/nouveau$/, vue: (v) => VueProduits.formulaire(v), module: "vitrine" },
+    { motif: /^\/produit-gere\/([^/]+)$/, vue: (v, m) => VueProduits.formulaire(v, m[1]), module: "vitrine" },
   ];
 
   const ROUTES_SUPERADMIN = [
@@ -35,6 +37,7 @@
     { motif: /^\/reglages$/, vue: (v) => VueSuperAdmin.compte(v) },
     { motif: /^\/paiements$/, vue: (v) => VueSuperAdmin.paiements(v) },
     { motif: /^\/codes$/, vue: (v) => VueSuperAdmin.codes(v) },
+    { motif: /^\/formules$/, vue: (v) => VueSuperAdmin.formules(v) },
     { motif: /^\/bannieres$/, vue: (v) => VueSuperAdmin.bannieres(v) },
     { motif: /^\/banniere\/nouvelle$/, vue: (v) => VueSuperAdmin.formulaireBanniere(v) },
     { motif: /^\/banniere\/([^/]+)$/, vue: (v, m) => VueSuperAdmin.formulaireBanniere(v, m[1]) },
@@ -46,18 +49,18 @@
      le confort de navigation. */
   const ROUTES_MODERATEUR = [
     { motif: /^\/$/, vue: (v) => VueAccueil.afficher(v), onglet: "/" },
-    { motif: /^\/clients$/, vue: (v) => VueClients.liste(v), onglet: "/clients" },
-    { motif: /^\/client\/nouveau$/, vue: (v) => VueClients.formulaire(v) },
+    { motif: /^\/clients$/, vue: (v) => VueClients.liste(v), onglet: "/clients", module: "atelier" },
+    { motif: /^\/client\/nouveau$/, vue: (v) => VueClients.formulaire(v), module: "atelier" },
     // Les mesures restent modifiables : elles se prennent au moment de la commande.
-    { motif: /^\/client\/([^/]+)\/modifier$/, vue: (v, m) => VueClients.formulaire(v, m[1]) },
-    { motif: /^\/client\/([^/]+)$/, vue: (v, m) => VueClients.fiche(v, m[1]) },
-    { motif: /^\/commandes$/, vue: (v) => VueCommandes.liste(v), onglet: "/commandes" },
-    { motif: /^\/commande\/nouvelle$/, vue: (v, m, p) => VueCommandes.nouvelle(v, p) },
-    { motif: /^\/commande\/([^/]+)$/, vue: (v, m) => VueCommandes.detail(v, m[1]) },
+    { motif: /^\/client\/([^/]+)\/modifier$/, vue: (v, m) => VueClients.formulaire(v, m[1]), module: "atelier" },
+    { motif: /^\/client\/([^/]+)$/, vue: (v, m) => VueClients.fiche(v, m[1]), module: "atelier" },
+    { motif: /^\/commandes$/, vue: (v) => VueCommandes.liste(v), onglet: "/commandes", module: "atelier" },
+    { motif: /^\/commande\/nouvelle$/, vue: (v, m, p) => VueCommandes.nouvelle(v, p), module: "atelier" },
+    { motif: /^\/commande\/([^/]+)$/, vue: (v, m) => VueCommandes.detail(v, m[1]), module: "atelier" },
     { motif: /^\/nouveau$/, vue: () => { location.hash = "#/"; menuNouveau(); } },
-    { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v), onglet: "/ventes" },
-    { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v) },
-    { motif: /^\/vente\/([^/]+)$/, vue: (v, m) => VueVentes.detail(v, m[1]) },
+    { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v), onglet: "/ventes", module: "vitrine" },
+    { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v), module: "vitrine" },
+    { motif: /^\/vente\/([^/]+)$/, vue: (v, m) => VueVentes.detail(v, m[1]), module: "vitrine" },
   ];
 
   /* Boutique publique : visible sans compte. */
@@ -66,7 +69,24 @@
     { motif: /^\/produit\/([^/]+)$/, vue: (v, m) => VueBoutique.produit(v, m[1]) },
     { motif: /^\/ateliers$/, vue: (v) => VueBoutique.ateliers(v), onglet: "/ateliers" },
     { motif: /^\/atelier\/([^/]+)$/, vue: (v, m) => VueBoutique.atelier(v, m[1]) },
+    { motif: /^\/inscription$/, vue: (v) => VueInscription.afficher(v) },
   ];
+
+  /* ---------- Ce que la formule ouvre ----------
+     Les écrans d'une maison dépendent de sa formule. Ce filtrage n'est
+     que du confort de navigation : le serveur applique les mêmes limites
+     (module_atelier / module_vitrine dans supabase/formules.sql), et
+     c'est lui qui fait foi. */
+
+  /* Chaque route et chaque onglet porte le module qu'il demande, écrit
+     noir sur blanc : « module: "vitrine" ». Sans marque, l'écran est
+     ouvert à toutes les formules. */
+
+  const ouvert = (module) =>
+    !module ||
+    (module === "atelier" ? Api.aModuleAtelier() : Api.aModuleVitrine());
+
+  const filtrerParFormule = (liste) => liste.filter((x) => ouvert(x.module));
 
   /* Onglets selon le contexte. Le superadmin n'en a pas (tabbar cachée). */
   const ONGLETS_PUBLICS = [
@@ -77,18 +97,18 @@
 
   const ONGLETS_MODERATEUR = [
     { href: "#/", tab: "/", icone: "accueil", label: "Accueil" },
-    { href: "#/commandes", tab: "/commandes", icone: "commandes", label: "Commandes" },
+    { href: "#/commandes", tab: "/commandes", icone: "commandes", label: "Commandes", module: "atelier" },
     { href: "#/nouveau", cta: true, label: "Nouveau" },
-    { href: "#/ventes", tab: "/ventes", icone: "argent", label: "Ventes" },
-    { href: "#/clients", tab: "/clients", icone: "clients", label: "Clients" },
+    { href: "#/ventes", tab: "/ventes", icone: "argent", label: "Ventes", module: "vitrine" },
+    { href: "#/clients", tab: "/clients", icone: "clients", label: "Clients", module: "atelier" },
   ];
 
   const ONGLETS_ADMIN = [
     { href: "#/", tab: "/", icone: "accueil", label: "Accueil" },
-    { href: "#/commandes", tab: "/commandes", icone: "commandes", label: "Commandes" },
+    { href: "#/commandes", tab: "/commandes", icone: "commandes", label: "Commandes", module: "atelier" },
     { href: "#/nouveau", cta: true, label: "Nouveau" },
-    { href: "#/produits", tab: "/produits", icone: "boutique", label: "Vitrine" },
-    { href: "#/clients", tab: "/clients", icone: "clients", label: "Clients" },
+    { href: "#/produits", tab: "/produits", icone: "boutique", label: "Vitrine", module: "vitrine" },
+    { href: "#/clients", tab: "/clients", icone: "clients", label: "Clients", module: "atelier" },
     { href: "#/statistiques", tab: "/statistiques", icone: "stats", label: "Recettes" },
   ];
 
@@ -148,10 +168,13 @@
     );
   }
 
+  /* Le compte existe côté connexion mais n'a pas de profil : le
+     déclencheur qui le crée n'a pas tourné. Une maison sans atelier,
+     elle, part vers l'inscription — ce n'est pas la même situation. */
   function ecranCompteNonRelie() {
     afficherVoile(boiteVoile(
-      "Compte non activé",
-      "Ce compte n'est relié à aucun atelier. Contactez votre fournisseur pour l'activer.",
+      "Compte incomplet",
+      "Ce compte n'a pas de profil dans l'application. Contactez-nous, nous le rétablirons.",
       '<button type="button" class="btn btn-bloc" id="voile-deconnexion">Retour à la boutique</button>'
     ));
     document.getElementById("voile-deconnexion").onclick = async () => {
@@ -228,14 +251,31 @@
     const superadmin = role === "superadmin";
     const moderateur = role === "moderateur";
     document.body.classList.toggle("mode-superadmin", superadmin);
-    if (moderateur) rendreTabbar(ONGLETS_MODERATEUR, "moderateur");
-    else if (!superadmin) rendreTabbar(ONGLETS_ADMIN, "admin");
 
     if (!superadmin) {
-      if (!Api.lireProfil() || !Api.atelierId() || !Api.lireAtelier()) {
+      /* Compte sans maison : c'est l'inscription qui reprend la main. On
+         y arrive aussi bien juste après la création du compte qu'en
+         revenant trois jours plus tard — l'état est en base, pas ici. */
+      if (!Api.lireProfil()) {
         ecranCompteNonRelie();
         return;
       }
+      if (!Api.atelierId() || !Api.lireAtelier()) {
+        document.getElementById("tabbar").innerHTML = "";
+        ongletsRendus = null;
+        masquerVoile();
+        await VueInscription.ouvrirMaison(vue);
+        /* rendreRoute() n'est pas passé par là : sans cela, l'écran
+           s'ouvre au défilement de la vue précédente. */
+        vue.scrollTop = 0;
+        window.scrollTo(0, 0);
+        return;
+      }
+      /* Les onglets dépendent de la formule : la clé de cache la porte,
+         sinon un changement de formule laisserait les anciens onglets. */
+      const cle = (moderateur ? "moderateur" : "admin") + ":" + Api.formuleCourante();
+      rendreTabbar(filtrerParFormule(moderateur ? ONGLETS_MODERATEUR : ONGLETS_ADMIN), cle);
+
       if (abonnementExpire()) {
         ecranAbonnementExpire();
         return;
@@ -244,7 +284,10 @@
     masquerVoile();
 
     await rendreRoute(
-      superadmin ? ROUTES_SUPERADMIN : moderateur ? ROUTES_MODERATEUR : ROUTES_ADMIN, vue, "#/");
+      superadmin
+        ? ROUTES_SUPERADMIN
+        : filtrerParFormule(moderateur ? ROUTES_MODERATEUR : ROUTES_ADMIN),
+      vue, "#/");
   }
 
   function marquerOnglet(onglet) {
@@ -281,24 +324,28 @@
 
   /* ---------- Délégation des interactions globales ---------- */
 
-  /* Le bouton « + » propose commande ou vente. */
+  /* Le bouton « + » propose commande ou vente, selon la formule. */
   function menuNouveau() {
+    const ligne = (href, icone, titre, sous, premiere) =>
+      '<button type="button" class="ligne"' + (premiere ? "" : ' style="margin-top:10px"') +
+        ' data-aller="' + href + '">' +
+        '<span class="pastille">' + UI.icone(icone, "ic-sm") + "</span>" +
+        '<span class="ligne-corps"><span class="ligne-titre">' + titre + "</span>" +
+          '<span class="ligne-sous">' + sous + "</span></span>" +
+      "</button>";
+
+    const choix = [];
+    if (Api.aModuleAtelier()) {
+      choix.push(["#/commande/nouvelle", "commandes", "Nouvelle commande",
+        "Vêtement sur mesure pour un client"]);
+    }
+    if (Api.aModuleVitrine()) {
+      choix.push(["#/vente-nouvelle", "argent", "Nouvelle vente",
+        "Facture sur les articles en stock"]);
+      choix.push(["#/ventes", "stats", "Mes ventes", "Historique des factures"]);
+    }
     const corps = UI.ouvrirFeuille("Que voulez-vous créer ?",
-      '<button type="button" class="ligne" data-aller="#/commande/nouvelle">' +
-        '<span class="pastille">' + UI.icone("commandes", "ic-sm") + "</span>" +
-        '<span class="ligne-corps"><span class="ligne-titre">Nouvelle commande</span>' +
-          '<span class="ligne-sous">Vêtement sur mesure pour un client</span></span>' +
-      "</button>" +
-      '<button type="button" class="ligne" style="margin-top:10px" data-aller="#/vente-nouvelle">' +
-        '<span class="pastille">' + UI.icone("argent", "ic-sm") + "</span>" +
-        '<span class="ligne-corps"><span class="ligne-titre">Nouvelle vente</span>' +
-          '<span class="ligne-sous">Facture sur les articles en stock</span></span>' +
-      "</button>" +
-      '<button type="button" class="ligne" style="margin-top:10px" data-aller="#/ventes">' +
-        '<span class="pastille">' + UI.icone("stats", "ic-sm") + "</span>" +
-        '<span class="ligne-corps"><span class="ligne-titre">Mes ventes</span>' +
-          '<span class="ligne-sous">Historique des factures</span></span>' +
-      "</button>");
+      choix.map((c, i) => ligne(c[0], c[1], c[2], c[3], i === 0)).join(""));
     corps.addEventListener("click", (ev) => {
       const choix = ev.target.closest("[data-aller]");
       if (!choix) return;

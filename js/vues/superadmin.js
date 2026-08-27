@@ -142,10 +142,20 @@ const VueSuperAdmin = (() => {
   /* ---------- Création d'un atelier + son administrateur ---------- */
 
   async function formulaire(vue) {
-    UI.entete({ titre: "Nouvel atelier", sous: "Compte administrateur + atelier", retour: true });
+    UI.entete({ titre: "Nouvel atelier", sous: "Création manuelle, en secours", retour: true });
 
     let logoDataUrl = "";
     let logoFichier = null;   /* déposé seulement à la création */
+
+    /* Les maisons s'inscrivent seules ; cet écran reste pour dépanner.
+       La formule y remplit le tarif comme à l'inscription — saisir un
+       prix différent des formules serait une source d'écarts. */
+    let listeFormules = [];
+    try {
+      listeFormules = await Store.listerFormules();
+    } catch (_) {
+      /* formules.sql pas encore exécuté : on retombe sur la saisie libre. */
+    }
 
     vue.innerHTML =
       '<form id="form-atelier" novalidate>' +
@@ -187,6 +197,18 @@ const VueSuperAdmin = (() => {
             '<div class="champ"><label for="na-indicatif">Indicatif pays</label>' +
               '<input id="na-indicatif" inputmode="numeric" autocomplete="off" value="229"></div>' +
           "</div>" +
+          (listeFormules.length
+            ? '<div class="champ"><label for="na-formule">Formule <span class="obligatoire">*</span></label>' +
+                '<select id="na-formule">' +
+                  listeFormules.map((f) =>
+                    '<option value="' + e(f.code) + '"' +
+                      (f.code === "atelier_vitrine" ? " selected" : "") + ">" +
+                      e(f.nom) + " — " + Utils.fmtMontant(Number(f.prix_mensuel) || 0, "FCFA") +
+                      " / mois</option>"
+                  ).join("") +
+                "</select>" +
+                '<div class="aide" id="na-formule-aide"></div></div>'
+            : "") +
           UI.champMontant({ id: "na-abonnement", label: "Abonnement mensuel", valeur: 5000, obligatoire: true,
             aide: "L'atelier démarre avec 14 jours offerts ; prolongez ensuite depuis sa fiche." }) +
         "</div>" +
@@ -194,6 +216,22 @@ const VueSuperAdmin = (() => {
         '<button type="submit" class="btn btn-bloc" id="na-creer">' +
           UI.icone("check", "ic-sm") + "Créer l'atelier et son administrateur</button>" +
       "</form>";
+
+    /* La formule remplit le tarif. Le champ reste modifiable : un tarif
+       négocié doit rester possible, et le superadministrateur est le seul
+       à pouvoir le faire. */
+    const champFormule = UI.$("#na-formule");
+    if (champFormule) {
+      const suivreFormule = () => {
+        const f = listeFormules.find((x) => x.code === champFormule.value);
+        if (!f) return;
+        UI.$("#na-abonnement").value = String(Number(f.prix_mensuel) || 0);
+        UI.$("#na-formule-aide").textContent = Store.resumeFormule(f.code) +
+          (f.active ? "" : " — formule fermée aux inscriptions.");
+      };
+      champFormule.addEventListener("change", suivreFormule);
+      suivreFormule();
+    }
 
     /* Logo */
     const champLogo = UI.$("#na-logo");
@@ -250,6 +288,7 @@ const VueSuperAdmin = (() => {
           devise: UI.$("#na-devise").value.trim() || "FCFA",
           indicatif: UI.$("#na-indicatif").value.replace(/\D/g, "") || "229",
           abonnement_mensuel: abonnement,
+          ...(champFormule ? { formule: champFormule.value } : {}),
         });
         /* Le chemin du logo contient l'identifiant de l'atelier, qui
            n'existe qu'une fois la ligne créée : d'où ce second temps. */
@@ -284,6 +323,10 @@ const VueSuperAdmin = (() => {
     try {
       paiements = await Api.listerPar("paiements_abonnement", "atelier_id", id, "cree_le", false);
     } catch (_) { /* base pas encore à jour : pas de journal */ }
+    let formulesFiche = [];
+    try {
+      formulesFiche = await Store.listerFormules();
+    } catch (_) { /* formules.sql pas encore exécuté */ }
 
     UI.entete({
       titre: atelier.nom,
@@ -308,12 +351,16 @@ const VueSuperAdmin = (() => {
       '<div class="carte">' +
         '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Abonnement</div>" +
         '<div class="paires">' +
+          '<div class="paire"><span class="l">Formule</span><span class="v">' +
+            e(Store.libelleFormule(atelier.formule, formulesFiche)) + "</span></div>" +
           '<div class="paire"><span class="l">Montant mensuel</span><span class="v gros">' +
             Utils.fmtMontant(atelier.abonnement_mensuel, atelier.devise) + "</span></div>" +
           '<div class="paire"><span class="l">Actif jusqu\'au</span><span class="v ' +
             (actif(atelier) ? "vert" : "rouge") + '">' +
             Utils.fmtDate(Utils.isoJour(new Date(atelier.abonnement_fin))) + "</span></div>" +
         "</div>" +
+        '<div class="aide" style="margin-top:8px">' +
+          e(Store.resumeFormule(atelier.formule || "atelier_vitrine")) + "</div>" +
         '<div class="btn-rangee" style="margin-top:12px">' +
           '<button type="button" class="btn btn-or" id="fa-prolonger">+ 1 mois</button>' +
           '<button type="button" class="btn btn-clair" id="fa-suspendre">Suspendre maintenant</button>' +
@@ -356,6 +403,18 @@ const VueSuperAdmin = (() => {
             '<div class="champ"><label for="fa-indicatif">Indicatif</label>' +
               '<input id="fa-indicatif" inputmode="numeric" autocomplete="off" value="' + e(atelier.indicatif) + '"></div>' +
           "</div>" +
+          (formulesFiche.length
+            ? '<div class="champ"><label for="fa-formule">Formule</label>' +
+                '<select id="fa-formule">' +
+                  formulesFiche.map((f) =>
+                    '<option value="' + e(f.code) + '"' +
+                      (f.code === (atelier.formule || "atelier_vitrine") ? " selected" : "") + ">" +
+                      e(f.nom) + " — " + Utils.fmtMontant(Number(f.prix_mensuel) || 0, atelier.devise) +
+                      " / mois</option>"
+                  ).join("") +
+                "</select>" +
+                '<div class="aide" id="fa-formule-aide"></div></div>'
+            : "") +
           UI.champMontant({ id: "fa-abonnement", label: "Abonnement mensuel", valeur: atelier.abonnement_mensuel }) +
           '<button type="submit" class="btn btn-bloc">' + UI.icone("check", "ic-sm") + "Enregistrer</button>" +
         "</div>" +
@@ -397,6 +456,23 @@ const VueSuperAdmin = (() => {
       recharger();
     };
 
+    /* Changer la formule change le tarif : c'est la seule occasion où un
+       abonnement déjà ouvert est re-tarifé, et elle est explicite. */
+    const formuleFiche = UI.$("#fa-formule");
+    if (formuleFiche) {
+      const suivre = () => {
+        const f = formulesFiche.find((x) => x.code === formuleFiche.value);
+        if (!f) return;
+        const change = f.code !== (atelier.formule || "atelier_vitrine");
+        if (change) UI.$("#fa-abonnement").value = String(Number(f.prix_mensuel) || 0);
+        UI.$("#fa-formule-aide").textContent = Store.resumeFormule(f.code) +
+          (change ? " — le tarif passe à " +
+            Utils.fmtMontant(Number(f.prix_mensuel) || 0, atelier.devise) + "." : "");
+      };
+      formuleFiche.addEventListener("change", suivre);
+      suivre();
+    }
+
     UI.$("#form-fiche").addEventListener("submit", async (ev) => {
       ev.preventDefault();
       try {
@@ -406,6 +482,7 @@ const VueSuperAdmin = (() => {
           devise: UI.$("#fa-devise").value.trim() || "FCFA",
           indicatif: UI.$("#fa-indicatif").value.replace(/\D/g, "") || "229",
           abonnement_mensuel: Utils.lireNombre(UI.$("#fa-abonnement").value) || atelier.abonnement_mensuel,
+          ...(formuleFiche ? { formule: formuleFiche.value } : {}),
         });
         UI.toast("Atelier mis à jour", "ok");
         recharger();
@@ -1243,6 +1320,16 @@ const VueSuperAdmin = (() => {
       "</button>" +
 
       '<button type="button" class="carte" style="width:100%;text-align:left;display:flex;align-items:center;' +
+          'gap:12px;border:0;font:inherit;cursor:pointer" data-nav="#/formules">' +
+        '<span class="pastille">' + UI.icone("argent", "ic-sm") + "</span>" +
+        '<span style="flex:1;min-width:0">' +
+          '<span class="ligne-titre">Formules et tarifs</span>' +
+          '<span class="ligne-sous">Ce que chaque maison choisit en s\'inscrivant</span>' +
+        "</span>" +
+        UI.icone("retour", "ic-sm") +
+      "</button>" +
+
+      '<button type="button" class="carte" style="width:100%;text-align:left;display:flex;align-items:center;' +
           'gap:12px;border:0;font:inherit;cursor:pointer" data-nav="#/bannieres">' +
         '<span class="pastille">' + UI.icone("image", "ic-sm") + "</span>" +
         '<span style="flex:1;min-width:0">' +
@@ -1477,6 +1564,103 @@ const VueSuperAdmin = (() => {
     };
   }
 
+  /* ---------- Formules et tarifs ----------
+     C'est ici que se décide ce qu'une maison paie. Le tarif saisi ne
+     touche que les inscriptions à venir : les abonnements déjà ouverts
+     gardent le prix auquel ils ont souscrit. */
+
+  async function formules(vue) {
+    let liste = [];
+    let erreur = "";
+    try {
+      liste = await Store.listerFormules();
+    } catch (err) {
+      erreur = err.message || "Formules illisibles";
+    }
+
+    const ateliers = await Api.lister("ateliers", "nom", true);
+    const comptes = {};
+    for (const a of ateliers) {
+      const code = a.formule || "atelier_vitrine";
+      comptes[code] = (comptes[code] || 0) + 1;
+    }
+
+    UI.entete({ titre: "Formules et tarifs", sous: "Règles d'inscription", retour: true });
+
+    if (!liste.length) {
+      vue.innerHTML =
+        '<div class="carte"><div class="carte-titre">' + UI.icone("alerte", "ic-sm") +
+          "Formules absentes</div>" +
+        '<p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--encre-douce)">' +
+          (erreur ? e(erreur) + "<br><br>" : "") +
+          "Exécutez <code>supabase/formules.sql</code> dans le SQL Editor de Supabase, " +
+          "puis revenez sur cet écran.</p></div>";
+      return;
+    }
+
+    vue.innerHTML =
+      '<div class="carte carte-accroche">' +
+        '<p style="margin:0;font-size:13.5px;line-height:1.6">' +
+          "Une maison choisit sa formule en s'inscrivant, et son tarif est fixé " +
+          "à ce moment-là. <strong>Changer un prix ici ne touche aucun abonnement " +
+          "en cours</strong> — seulement les inscriptions suivantes.</p>" +
+      "</div>" +
+
+      '<form id="form-formules">' +
+        liste.map((f) =>
+          '<div class="carte" data-formule="' + e(f.code) + '">' +
+            '<div class="carte-titre">' + UI.icone("argent", "ic-sm") + e(f.nom) +
+              '<span class="badge ' + (f.active ? "badge-ok" : "badge-fait") + '" ' +
+                'style="margin-left:auto">' + (f.active ? "Proposée" : "Fermée") + "</span>" +
+            "</div>" +
+            '<div class="champ"><label for="f-nom-' + e(f.code) + '">Nom affiché</label>' +
+              '<input id="f-nom-' + e(f.code) + '" value="' + e(f.nom) + '"></div>' +
+            '<div class="champ"><label for="f-desc-' + e(f.code) + '">Description</label>' +
+              '<textarea id="f-desc-' + e(f.code) + '" style="min-height:70px">' +
+                e(f.description || "") + "</textarea>" +
+              '<div class="aide">' + e(Store.resumeFormule(f.code)) + "</div></div>" +
+            UI.champMontant({
+              id: "f-prix-" + f.code, label: "Tarif mensuel",
+              valeur: Number(f.prix_mensuel) || 0, obligatoire: true,
+            }) +
+            '<label class="interrupteur" style="display:flex;margin-top:4px">' +
+              '<input type="checkbox" id="f-active-' + e(f.code) + '"' +
+              (f.active ? " checked" : "") + ">" +
+              "<span>Proposée à l'inscription</span></label>" +
+            '<div class="aide" style="margin-top:8px">' +
+              (comptes[f.code] || 0) + " maison" + ((comptes[f.code] || 0) > 1 ? "s" : "") +
+              " sur cette formule aujourd'hui.</div>" +
+          "</div>"
+        ).join("") +
+        '<div style="margin-top:16px"><button type="submit" class="btn btn-bloc" id="f-enregistrer">' +
+          UI.icone("check", "ic-sm") + "Enregistrer les tarifs</button></div>" +
+      "</form>";
+
+    UI.$("#form-formules").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const bouton = UI.$("#f-enregistrer");
+      bouton.disabled = true;
+      try {
+        for (const f of liste) {
+          const nom = UI.$("#f-nom-" + f.code).value.trim();
+          if (!nom) throw new Error("Chaque formule doit garder un nom.");
+          await Api.mettreAJourPar("formules", "code", f.code, {
+            nom,
+            description: UI.$("#f-desc-" + f.code).value.trim(),
+            prix_mensuel: Math.max(0, Utils.lireNombre(UI.$("#f-prix-" + f.code).value)),
+            active: UI.$("#f-active-" + f.code).checked,
+            modifie_le: new Date().toISOString(),
+          });
+        }
+        UI.toast("Tarifs enregistrés", "ok");
+        formules(vue);
+      } catch (err) {
+        UI.toast(err.message || "Enregistrement impossible", "erreur");
+        bouton.disabled = false;
+      }
+    });
+  }
+
   return { liste, formulaire, fiche, compte, paiements, codes, bannieres, formulaireBanniere,
-           tableauBordA4, renouvellementsA4 };
+           formules, tableauBordA4, renouvellementsA4 };
 })();

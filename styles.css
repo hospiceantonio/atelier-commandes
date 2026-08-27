@@ -675,3 +675,24 @@ details.bloc > .contenu{padding:0 14px 14px}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms !important;transition-duration:.01ms !important}
 }
+
+/* ---------- Inscription : accroche et choix de formule ---------- */
+
+.carte-accroche{
+  background:linear-gradient(135deg,var(--indigo-700) 0%,var(--indigo-800) 100%);
+  color:#fff;
+}
+.carte-accroche .carte-titre,
+.carte-accroche p,
+.carte-accroche strong{color:#fff}
+.carte-accroche .carte-titre .ic{stroke:#fff}
+
+/* La formule retenue se voit au premier coup d'œil : le liseré indigo
+   et le fond clair suffisent, sans dépendre de la couleur du texte. */
+.carte-formule{width:100%;text-align:left;align-items:center}
+.carte-formule.choisie{
+  border-color:var(--indigo-700);
+  box-shadow:inset 0 0 0 1.5px var(--indigo-700);
+  background:var(--indigo-100);
+}
+.carte-formule .ligne-fin strong{font-size:15px;color:var(--indigo-700);white-space:nowrap}

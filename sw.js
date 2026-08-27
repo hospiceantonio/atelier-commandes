@@ -3,7 +3,7 @@
    hors ligne une fois installée sur le téléphone.
    Incrémenter VERSION à chaque mise à jour des fichiers.
    ========================================================= */
-const VERSION = "atelier-v35";
+const VERSION = "atelier-v36";
 
 const FICHIERS = [
   "./",
@@ -20,6 +20,7 @@ const FICHIERS = [
   "./js/ui.js",
   "./js/paiement.js",
   "./js/vues/connexion.js",
+  "./js/vues/inscription.js",
   "./js/vues/superadmin.js",
   "./js/vues/accueil.js",
   "./js/vues/clients.js",

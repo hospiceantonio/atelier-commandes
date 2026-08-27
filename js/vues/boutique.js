@@ -161,14 +161,9 @@ const VueBoutique = (() => {
       texte: "Les ateliers d'ici reçoivent leurs commandes sur cette page chaque semaine." },
   ];
 
-  function lienInscription() {
-    const prm = Api.lireParametres();
-    const numero = prm && prm.contact_whatsapp ? prm.contact_whatsapp : "";
-    if (!numero) return "#/connexion";
-    return Utils.lienWhatsApp(numero,
-      "Bonjour 👋 Je suis un atelier / styliste et je souhaite " +
-      "enregistrer ma maison sur l'application Atelier.", "229");
-  }
+  /* Une maison ouvre son compte elle-même : le bouton mène droit à
+     l'inscription, plus au WhatsApp du superadministrateur. */
+  const lienInscription = () => "#/inscription";
 
   function carteInvitation(n) {
     const inv = INVITATIONS[n % INVITATIONS.length];

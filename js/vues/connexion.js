@@ -1,28 +1,18 @@
 /* =========================================================
    Vue Connexion — plein écran (réutilise le voile indigo).
-   Les comptes sont créés par le superadministrateur ; le lien
-   « créer un compte » ne sert qu'à la toute première
-   installation (le compte créé reste inactif tant qu'il n'est
-   pas promu ou relié à un atelier).
+   Une maison ouvre son compte elle-même : le lien ci-dessous mène à
+   l'inscription. Le superadministrateur garde la création manuelle
+   en secours, mais elle n'est plus le chemin normal.
    ========================================================= */
 const VueConnexion = (() => {
 
-  /* Invitation à rejoindre la plateforme : renvoie vers le WhatsApp du
-     superadministrateur, réglé dans « Mon compte ». */
+  /* Invitation à rejoindre la plateforme. */
   function invitationEnregistrement() {
-    const prm = Api.lireParametres();
-    const numero = prm && prm.contact_whatsapp ? prm.contact_whatsapp : "";
-    const texte = "Vous êtes un atelier ou un styliste ?";
-    if (!numero) {
-      return '<p class="voile-contact">' + texte + " Contactez-nous pour ouvrir votre compte.</p>";
-    }
-    const message = "Bonjour 👋 Je suis un atelier / styliste et je souhaite " +
-      "enregistrer mon atelier sur l'application Atelier.";
     return (
-      '<p class="voile-contact" style="margin-top:18px">' + texte + "<br>" +
-        '<a href="' + Utils.lienWhatsApp(numero, message, "229") + '" target="_blank" rel="noopener" ' +
+      '<p class="voile-contact" style="margin-top:18px">Vous êtes un atelier ou un styliste ?<br>' +
+        '<a href="#" id="cx-inscription" ' +
           'style="font-weight:700;color:var(--vert);text-decoration:underline">' +
-          "Enregistrez-vous dès maintenant</a>" +
+          "Ouvrez votre maison en quelques minutes</a>" +
       "</p>"
     );
   }
@@ -76,6 +66,13 @@ const VueConnexion = (() => {
       location.hash = "#/";
       window.AppNaviguer();
     });
+
+    document.getElementById("cx-inscription").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      masquer();
+      location.hash = "#/inscription";
+      window.AppNaviguer();
+    });
   }
 
   function entrer() {
@@ -87,7 +84,11 @@ const VueConnexion = (() => {
   /* Second écran : le code reçu par email. Le mot de passe
      est déjà validé côté serveur, mais la session ne donne encore accès
      à rien tant que ce code n'est pas confirmé. */
-  function demanderCode(email) {
+  function demanderCode(email, apres) {
+    /* `apres` : ce qu'il faut faire une fois le code accepté. L'inscription
+       s'en sert pour enchaîner sur le choix de la formule plutôt que
+       d'entrer directement dans l'application. */
+    const suite = apres || entrer;
     const voile = document.getElementById("voile-licence");
     /* Le voile peut être fermé si la connexion n'est pas partie de cet
        écran : on le rouvre, sinon le formulaire resterait invisible. */
@@ -123,7 +124,7 @@ const VueConnexion = (() => {
       valider.disabled = true;
       try {
         await Api.verifierCode(email, champ.value);
-        entrer();
+        suite();
       } catch (err) {
         UI.toast(err.message || "Code refusé", "erreur");
         valider.disabled = false;
@@ -156,5 +157,5 @@ const VueConnexion = (() => {
     document.body.style.overflow = "";
   }
 
-  return { afficher, masquer };
+  return { afficher, masquer, demanderCode };
 })();

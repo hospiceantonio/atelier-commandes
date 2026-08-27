@@ -148,6 +148,41 @@ const Api = (() => {
     return data;
   }
 
+  /* ---------- Formules et inscription libre ---------- */
+
+  /** Les formules sont lisibles sans compte : l'écran d'inscription
+      affiche les tarifs avant que la personne n'ait ouvert de session. */
+  async function listerFormules() {
+    const { data, error } = await client.from("formules").select("*").order("ordre");
+    if (error) throw new Error(traduire(error));
+    return data || [];
+  }
+
+  /**
+   * Ouvre la maison du compte connecté. Le tarif n'est PAS envoyé : le
+   * serveur le lit dans la formule choisie (creer_mon_atelier, dans
+   * supabase/formules.sql). Sans cela, on s'abonnerait à zéro franc.
+   */
+  async function creerMonAtelier({ nom, formule, slogan, telWhatsApp, telAppel }) {
+    const cree = await rpc("creer_mon_atelier", {
+      p_nom: nom,
+      p_formule: formule,
+      p_slogan: slogan || "",
+      p_tel_whatsapp: telWhatsApp || "",
+      p_tel_appel: telAppel || "",
+    });
+    /* Le profil vient de recevoir son atelier : sans ce rechargement, le
+       reste de l'application croirait le compte encore sans maison. */
+    await chargerContexte();
+    return cree;
+  }
+
+  /* Modules ouverts par la formule. Le serveur applique les mêmes règles
+     (module_atelier / module_vitrine) : ceci n'est que le confort. */
+  const formuleCourante = () => (atelier && atelier.formule) || "atelier_vitrine";
+  const aModuleAtelier = () => ["atelier", "atelier_vitrine"].indexOf(formuleCourante()) >= 0;
+  const aModuleVitrine = () => ["vitrine", "atelier_vitrine"].indexOf(formuleCourante()) >= 0;
+
   /** Auto-inscription (compte inerte tant qu'aucun atelier n'y est relié). */
   async function creerCompte(email, motDePasse, nomComplet, telephone) {
     const { data, error } = await client.auth.signUp({
@@ -262,6 +297,12 @@ const Api = (() => {
     return verifier(await client.from(table).update(objet).eq("id", id).select("*").single());
   }
 
+  /** Même chose pour une table dont la clé n'est pas « id » — les
+      formules sont identifiées par leur code. */
+  async function mettreAJourPar(table, colonne, valeur, objet) {
+    return verifier(await client.from(table).update(objet).eq(colonne, valeur).select("*").single());
+  }
+
   async function supprimerLigne(table, id) {
     const { error } = await client.from(table).delete().eq("id", id);
     if (error) throw new Error(traduire(error));
@@ -282,7 +323,9 @@ const Api = (() => {
     lireParametres, majParametres, estAdmin,
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
     creerCompte, creerCompteAdmin, deconnexion,
-    lister, listerTranche, listerPar, lireLigne, inserer, mettreAJour, supprimerLigne, rpc,
+    listerFormules, creerMonAtelier, formuleCourante, aModuleAtelier, aModuleVitrine,
+    lister, listerTranche, listerPar, lireLigne, inserer, mettreAJour, mettreAJourPar,
+    supprimerLigne, rpc,
     deposerFichier, urlPublique, urlSignee, supprimerFichiers,
   };
 })();
