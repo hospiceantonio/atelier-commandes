@@ -900,3 +900,114 @@ end
 $$;
 
 grant execute on function public.enregistrer_vente(text, jsonb, numeric, text, text) to authenticated;
+
+-- =========================================================
+-- Double facteur : mot de passe + code reçu par email
+-- =========================================================
+--
+-- Le mot de passe seul ne suffit plus. Deux conditions doivent être
+-- réunies pour qu'une session donne accès aux données :
+--
+--   1. le mot de passe a été validé il y a moins de 20 minutes ;
+--   2. la session en cours a été ouverte par un code reçu par email.
+--
+-- Les deux sont vérifiées par le serveur, dans role_courant() et
+-- atelier_courant() : toutes les politiques passent par ces deux
+-- fonctions, donc une session incomplète ne lit rien, quelle que soit
+-- l'application utilisée. L'écran de saisie du code n'est qu'un confort.
+--
+-- POUR DÉSACTIVER EN CAS DE PROBLÈME (verrouillage, email indisponible),
+-- exécuter cette seule ligne dans l'éditeur SQL :
+--
+--     update public.parametres set double_facteur = false;
+--
+-- L'éditeur SQL ne passe pas par les politiques : elle fonctionne même
+-- si plus personne ne peut se connecter.
+
+alter table public.parametres add column if not exists double_facteur boolean not null default false;
+
+-- Trace du premier facteur. Une ligne par compte, écrasée à chaque fois.
+create table if not exists public.facteurs_connexion (
+  utilisateur_id  uuid primary key references auth.users (id) on delete cascade,
+  mot_de_passe_le timestamptz not null default now()
+);
+
+alter table public.facteurs_connexion enable row level security;
+-- Aucune politique : la table n'est atteignable que par les fonctions
+-- ci-dessous, qui sont « security definer ».
+
+-- Appelée juste après la validation du mot de passe, avec la session
+-- incomplète qui en résulte : elle ne dépend donc pas de role_courant().
+create or replace function public.enregistrer_mot_de_passe()
+returns void language plpgsql security definer set search_path = public as
+$$
+begin
+  if auth.uid() is null then
+    raise exception 'Aucune session';
+  end if;
+  insert into public.facteurs_connexion (utilisateur_id, mot_de_passe_le)
+  values (auth.uid(), now())
+  on conflict (utilisateur_id) do update set mot_de_passe_le = now();
+end
+$$;
+
+revoke all on function public.enregistrer_mot_de_passe() from public, anon;
+grant execute on function public.enregistrer_mot_de_passe() to authenticated;
+
+-- Diagnostic : sert à vérifier, avant d'activer le double facteur, que
+-- les jetons de ce projet portent bien la méthode d'authentification.
+-- Sans « amr », personne ne pourrait plus se connecter.
+create or replace function public.diagnostic_jeton()
+returns jsonb language sql stable as
+$$
+  select jsonb_build_object(
+    'session_id', auth.jwt() ->> 'session_id',
+    'aal',        auth.jwt() ->> 'aal',
+    'methodes',   (select coalesce(jsonb_agg(m ->> 'method'), '[]'::jsonb)
+                   from jsonb_array_elements(coalesce(auth.jwt() -> 'amr', '[]'::jsonb)) m)
+  );
+$$;
+
+revoke all on function public.diagnostic_jeton() from public, anon;
+grant execute on function public.diagnostic_jeton() to authenticated;
+
+create or replace function public.double_facteur_exige()
+returns boolean language sql stable security definer set search_path = public as
+$$ select coalesce((select double_facteur from public.parametres where id = 1), false) $$;
+
+-- Les deux facteurs sont-ils réunis pour la session en cours ?
+create or replace function public.double_facteur_ok()
+returns boolean language sql stable security definer set search_path = public as
+$$
+  select
+    -- Second facteur : la session vient d'un code reçu par email.
+    exists (
+      select 1
+      from jsonb_array_elements(coalesce(auth.jwt() -> 'amr', '[]'::jsonb)) m
+      where m ->> 'method' in ('otp', 'magiclink', 'email', 'email_otp')
+    )
+    -- Premier facteur : le mot de passe a été donné juste avant.
+    and exists (
+      select 1 from public.facteurs_connexion f
+      where f.utilisateur_id = auth.uid()
+        and f.mot_de_passe_le > now() - interval '20 minutes'
+    );
+$$;
+
+-- Le verrou. Toutes les politiques passent par l'une de ces deux
+-- fonctions : les gater ici suffit à gater l'ensemble des données.
+create or replace function public.role_courant()
+returns text language sql stable security definer set search_path = public as
+$$
+  select role from public.profils
+  where id = auth.uid()
+    and (not public.double_facteur_exige() or public.double_facteur_ok())
+$$;
+
+create or replace function public.atelier_courant()
+returns uuid language sql stable security definer set search_path = public as
+$$
+  select atelier_id from public.profils
+  where id = auth.uid()
+    and (not public.double_facteur_exige() or public.double_facteur_ok())
+$$;

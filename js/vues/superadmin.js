@@ -1228,7 +1228,31 @@ const VueSuperAdmin = (() => {
       "</button>" +
 
       (prm
-        ? '<form id="form-kkiapay">' +
+        ? '<div class="carte">' +
+            '<div class="carte-titre">' + UI.icone("connexion", "ic-sm") + "Double facteur à la connexion</div>" +
+            '<p style="margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--encre-douce)">' +
+              "Une fois activé, chaque connexion — superadministrateur, administrateur " +
+              "ou modérateur — demande le mot de passe <em>puis</em> un code à 6 chiffres " +
+              "envoyé par email. Le serveur exige les deux : le mot de passe seul ne " +
+              "donne plus accès à rien.</p>" +
+            '<div class="alerte" style="margin-bottom:12px">' + UI.icone("alerte", "ic-sm") +
+              "<span>À faire <strong>avant</strong> d'activer : dans Supabase, régler un " +
+              "SMTP personnalisé (sinon 2 à 3 emails par heure seulement) et ajouter " +
+              "<code>{{ .Token }}</code> au modèle d'email « Magic Link ». " +
+              "Puis lancer le test ci-dessous.</span></div>" +
+            '<button type="button" class="btn btn-clair btn-bloc" id="sa-2fa-test">' +
+              UI.icone("check", "ic-sm") + "Tester la compatibilité</button>" +
+            '<div id="sa-2fa-resultat" style="margin-top:10px"></div>' +
+            '<label class="interrupteur" style="display:flex;margin-top:12px">' +
+              '<input type="checkbox" id="sa-2fa"' + (prm.double_facteur ? " checked" : "") + ">" +
+              "<span>Exiger le code par email à chaque connexion</span>" +
+            "</label>" +
+            '<div class="aide" style="margin-top:10px">En cas de blocage, cette ligne dans ' +
+              "l'éditeur SQL de Supabase rouvre l'accès à tout le monde :<br>" +
+              '<code style="user-select:all">update public.parametres set double_facteur = false;</code></div>' +
+          "</div>" +
+
+          '<form id="form-kkiapay">' +
             '<div class="carte">' +
               '<div class="carte-titre">' + UI.icone("whatsapp", "ic-sm") + "Contact affiché au public</div>" +
               '<div class="champ"><label for="sa-contact">Votre numéro WhatsApp</label>' +
@@ -1300,6 +1324,85 @@ const VueSuperAdmin = (() => {
               tableauBordA4(stats, ateliers, devise, profil, libelle)));
         };
       }
+    }
+
+    /* ---------- Double facteur ---------- */
+
+    /* Le verrou serveur repose sur la méthode d'authentification inscrite
+       dans le jeton. Si ce projet Supabase ne la renseigne pas, activer le
+       double facteur enfermerait tout le monde dehors : on le vérifie
+       avant, et le test conditionne l'activation. */
+    let compatible = null;
+    const boutonTest = UI.$("#sa-2fa-test");
+    const zoneTest = UI.$("#sa-2fa-resultat");
+
+    async function tester() {
+      zoneTest.innerHTML = '<div class="aide">Test en cours…</div>';
+      try {
+        const d = await Api.diagnosticJeton();
+        const methodes = (d && d.methodes) || [];
+        compatible = methodes.length > 0;
+        zoneTest.innerHTML = compatible
+          ? '<div class="alerte" style="background:var(--vert-clair);color:#0B6B3D">' +
+              UI.icone("check", "ic-sm") + "<span>Compatible. Méthode(s) vue(s) dans le jeton : <strong>" +
+              e(methodes.join(", ")) + "</strong>. Vous pouvez activer.</span></div>"
+          : '<div class="alerte alerte-danger">' + UI.icone("alerte", "ic-sm") +
+              "<span>Ce projet Supabase n'inscrit pas la méthode d'authentification " +
+              "dans le jeton. Activer le double facteur bloquerait toutes les " +
+              "connexions : l'interrupteur reste donc refusé.</span></div>";
+      } catch (err) {
+        compatible = false;
+        zoneTest.innerHTML = '<div class="alerte alerte-danger">' + UI.icone("alerte", "ic-sm") +
+          "<span>Test impossible : " + e(err.message || "erreur") +
+          ". Exécutez <code>supabase/schema.sql</code> puis reconnectez-vous.</span></div>";
+      }
+    }
+
+    if (boutonTest) boutonTest.onclick = tester;
+
+    const interrupteur2fa = UI.$("#sa-2fa");
+    if (interrupteur2fa) {
+      interrupteur2fa.addEventListener("change", async () => {
+        const activer = interrupteur2fa.checked;
+
+        if (activer && compatible !== true) {
+          interrupteur2fa.checked = false;
+          UI.toast("Lancez d'abord « Tester la compatibilité »", "erreur");
+          return;
+        }
+        if (activer) {
+          const ok = await UI.confirmer({
+            titre: "Activer le double facteur ?",
+            texte: "À la prochaine connexion, vous devrez saisir un code reçu à " +
+              (profil.email || "votre adresse") + ". Si les emails n'arrivent pas, " +
+              "plus personne ne pourra se connecter — la ligne SQL indiquée sous " +
+              "l'interrupteur rouvrira l'accès.",
+            bouton: "Activer",
+          });
+          if (!ok) { interrupteur2fa.checked = false; return; }
+        }
+
+        try {
+          await Api.majParametres({ double_facteur: activer });
+        } catch (err) {
+          interrupteur2fa.checked = !activer;
+          UI.toast(err.message || "Enregistrement impossible", "erreur");
+          return;
+        }
+
+        if (!activer) {
+          UI.toast("Double facteur désactivé", "ok");
+          return;
+        }
+
+        /* La session en cours n'a passé qu'un facteur : dès l'activation,
+           le serveur cesse de lui répondre. Sans cette reconnexion, les
+           écrans se videraient sans explication. */
+        UI.toast("Double facteur activé — reconnectez-vous", "ok");
+        await Api.deconnexion();
+        location.hash = "#/connexion";
+        window.AppNaviguer();
+      });
     }
 
     const formulaireKkiapay = UI.$("#form-kkiapay");

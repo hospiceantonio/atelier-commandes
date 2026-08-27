@@ -74,11 +74,77 @@ const Api = (() => {
     return parametres;
   }
 
+  /* ---------- Connexion ----------
+     Sans double facteur, le mot de passe suffit. Avec, la connexion se
+     fait en deux temps : le mot de passe d'abord, puis un code reçu par
+     email. Le serveur exige les deux (voir double_facteur_ok dans
+     supabase/schema.sql) : sauter l'écran du code ne donne accès à rien. */
+
+  const doubleFacteurExige = () => !!(parametres && parametres.double_facteur);
+
+  /**
+   * Premier facteur. Renvoie { termine: true } si la session est utilisable
+   * telle quelle, ou { termine: false, email } s'il reste le code à saisir.
+   */
   async function connexion(email, motDePasse) {
     const { data, error } = await client.auth.signInWithPassword({ email, password: motDePasse });
     if (error) throw new Error(traduire(error));
     session = data.session;
+
+    /* Les paramètres sont publics : ils ont pu être lus avant la connexion. */
+    if (!parametres) await chargerParametres();
+    if (!doubleFacteurExige()) {
+      await chargerContexte();
+      return { termine: true };
+    }
+
+    /* Le serveur note que le mot de passe vient d'être donné, puis un code
+       part par email. La session ouverte ici ne lit encore rien. */
+    const { error: eNote } = await client.rpc("enregistrer_mot_de_passe");
+    if (eNote) throw new Error(traduire(eNote));
+
+    const { error: eCode } = await client.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    if (eCode) throw new Error(traduire(eCode));
+
+    return { termine: false, email };
+  }
+
+  /** Second facteur : le code à 6 chiffres reçu par email. */
+  async function verifierCode(email, code) {
+    const { data, error } = await client.auth.verifyOtp({
+      email,
+      token: String(code || "").trim(),
+      type: "email",
+    });
+    if (error) throw new Error(traduire(error));
+    session = (data && data.session) || null;
+    if (!session) throw new Error("Code accepté mais session absente — réessayez.");
     await chargerContexte();
+    if (!profil) {
+      /* Le serveur refuse encore la session : inutile de laisser croire
+         que tout va bien, le reste de l'application serait vide. */
+      throw new Error("Second facteur refusé par le serveur. Reprenez la connexion.");
+    }
+    return true;
+  }
+
+  /** Renvoie un nouveau code à la même adresse. */
+  async function renvoyerCode(email) {
+    const { error } = await client.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    if (error) throw new Error(traduire(error));
+  }
+
+  /** Contenu du jeton : sert au superadmin à vérifier avant d'activer. */
+  async function diagnosticJeton() {
+    const { data, error } = await client.rpc("diagnostic_jeton");
+    if (error) throw new Error(traduire(error));
+    return data;
   }
 
   /** Auto-inscription (compte inerte tant qu'aucun atelier n'y est relié). */
@@ -168,7 +234,8 @@ const Api = (() => {
     configOk, bibliothequeOk, init, chargerContexte,
     connecte, role, lireProfil, lireAtelier, atelierId, rafraichirAtelier,
     lireParametres, majParametres, estAdmin,
-    connexion, creerCompte, creerCompteAdmin, deconnexion,
+    connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
+    creerCompte, creerCompteAdmin, deconnexion,
     lister, listerPar, lireLigne, inserer, mettreAJour, supprimerLigne, rpc,
   };
 })();
