@@ -203,7 +203,10 @@ h1,h2,h3,h4{margin:0;line-height:1.25}
 }
 .champ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235E6280' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 12px center;background-size:18px;padding-right:38px}
-.champ .aide{font-size:12px;color:var(--encre-tres-douce);margin-top:5px}
+/* Hors d'un .champ, cette classe ne faisait rien : les quelques aides
+   posées directement dans une carte s'affichaient en texte courant, et
+   certaines vues recopiaient ces trois déclarations en style en ligne. */
+.aide{font-size:12px;color:var(--encre-tres-douce);margin-top:5px}
 .champ-duo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 /* Quand une étiquette tient sur deux lignes et l'autre sur une seule,
    les deux saisies partaient à des hauteurs différentes. La grille donne
@@ -687,12 +690,70 @@ details.bloc > .contenu{padding:0 14px 14px}
 .carte-accroche strong{color:#fff}
 .carte-accroche .carte-titre .ic{stroke:#fff}
 
-/* La formule retenue se voit au premier coup d'œil : le liseré indigo
-   et le fond clair suffisent, sans dépendre de la couleur du texte. */
-.carte-formule{width:100%;text-align:left;align-items:center}
-.carte-formule.choisie{
-  border-color:var(--indigo-700);
-  box-shadow:inset 0 0 0 1.5px var(--indigo-700);
-  background:var(--indigo-100);
+/* Carte de formule : verticale, parce qu'une description et un prix
+   côte à côte sur 390 px finissent par s'écraser l'un l'autre. Le nom et
+   le prix en tête, puis la même liste de capacités pour les trois — ce
+   qui varie d'une formule à l'autre se lit alors en diagonale. */
+.formules{display:grid;gap:10px}
+
+.formule{
+  display:block;width:100%;text-align:left;
+  padding:13px 14px;font:inherit;color:inherit;cursor:pointer;
+  background:var(--blanc);
+  border:1.5px solid var(--trait);
+  border-radius:var(--r);
+  transition:border-color .12s ease,background-color .12s ease;
 }
-.carte-formule .ligne-fin strong{font-size:15px;color:var(--indigo-700);white-space:nowrap}
+.formule:focus-visible{outline:2px solid var(--indigo-500);outline-offset:2px}
+
+/* Le liseré et le fond portent la sélection : ni la couleur du texte ni
+   une coche seule ne suffiraient à la distance de lecture d'un pouce. */
+.formule.choisie{
+  border-color:var(--indigo-700);
+  box-shadow:inset 0 0 0 1px var(--indigo-700);
+  background:var(--indigo-50);
+}
+
+.formule-tete{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+}
+.formule-nom{font-size:16px;font-weight:750;line-height:1.25;color:var(--encre)}
+.formule-prix{
+  flex:none;text-align:right;white-space:nowrap;
+  font-size:15.5px;font-weight:750;color:var(--indigo-700);
+}
+.formule-prix small{
+  display:block;margin-top:1px;
+  font-size:11px;font-weight:600;letter-spacing:.2px;color:var(--encre-tres-douce);
+}
+
+.formule-liste{display:grid;gap:5px;margin-top:11px}
+.formule-liste > span{
+  display:flex;align-items:center;gap:7px;
+  font-size:12.5px;line-height:1.3;
+}
+.formule-liste .ic{flex:none;width:14px;height:14px}
+.formule-liste .oui{color:var(--encre)}
+.formule-liste .oui .ic{stroke:var(--vert)}
+.formule-liste .non{color:var(--encre-tres-douce)}
+.formule-liste .non .ic{stroke:var(--encre-tres-douce)}
+
+/* Sur large écran, les trois formules se comparent côte à côte. */
+@media (min-width:700px){
+  .formules{grid-template-columns:repeat(3,1fr);align-items:start}
+}
+
+/* Aperçu sur l'écran d'inscription : là, c'est la description libre qui
+   présente la formule — la comparaison, elle, viendra à l'écran suivant.
+   Elle est bornée à trois lignes : le champ est libre en longueur. */
+.apercu-formules{display:grid;gap:12px}
+.apercu-formules > div + div{border-top:1px solid var(--trait);padding-top:12px}
+.apercu-tete{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.apercu-nom{font-size:14.5px;font-weight:700;color:var(--encre)}
+.apercu-prix{
+  flex:none;white-space:nowrap;font-size:14px;font-weight:750;color:var(--indigo-700);
+}
+.apercu-texte{
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  margin:4px 0 0;font-size:12.5px;line-height:1.45;color:var(--encre-douce);
+}

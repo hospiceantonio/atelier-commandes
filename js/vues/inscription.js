@@ -46,14 +46,21 @@ const VueInscription = (() => {
       (formules.length
         ? '<div class="carte">' +
             '<div class="carte-titre">' + UI.icone("argent", "ic-sm") + "Nos formules</div>" +
-            '<div class="paires">' +
+            '<div class="apercu-formules">' +
               formules.map((f) =>
-                '<div class="paire"><span class="l">' + e(f.nom) + "</span>" +
-                  '<span class="v">' + Utils.fmtMontant(Number(f.prix_mensuel) || 0, "FCFA") +
-                  " / mois</span></div>"
+                "<div>" +
+                  '<div class="apercu-tete">' +
+                    '<span class="apercu-nom">' + e(f.nom) + "</span>" +
+                    '<span class="apercu-prix">' +
+                      Utils.fmtMontant(Number(f.prix_mensuel) || 0, "FCFA") + " / mois</span>" +
+                  "</div>" +
+                  (f.description
+                    ? '<p class="apercu-texte">' + e(f.description) + "</p>"
+                    : "") +
+                "</div>"
               ).join("") +
             "</div>" +
-            '<div class="aide" style="margin-top:8px">Vous choisirez la vôtre juste après.</div>' +
+            '<div class="aide" style="margin-top:10px">Vous choisirez la vôtre juste après.</div>' +
           "</div>"
         : "") +
 
@@ -163,19 +170,46 @@ const VueInscription = (() => {
        mieux qu'un formulaire qu'on croit rempli et qui refuse. */
     let choisie = formules[0].code;
 
-    const carteFormule = (f) =>
-      '<button type="button" class="ligne carte-formule" data-formule="' + e(f.code) + '">' +
-        '<span class="pastille">' + UI.icone(
-          Store.formuleOuvreVitrine(f.code) && !Store.formuleOuvreAtelier(f.code) ? "boutique"
-            : Store.formuleOuvreVitrine(f.code) ? "check" : "commandes", "ic-sm") + "</span>" +
-        '<span class="ligne-corps">' +
-          '<span class="ligne-titre">' + e(f.nom) + "</span>" +
-          '<span class="ligne-sous">' + e(f.description || Store.resumeFormule(f.code)) + "</span>" +
-        "</span>" +
-        '<span class="ligne-fin"><strong>' +
-          Utils.fmtMontant(Number(f.prix_mensuel) || 0, "FCFA") + "</strong>" +
-          '<span class="ligne-sous">par mois</span></span>' +
-      "</button>";
+    /* Les mêmes cinq lignes pour les trois formules, dans le même ordre :
+       ce qui varie d'une carte à l'autre saute alors aux yeux. Elles se
+       déduisent des modules, donc elles restent courtes — la description
+       libre du superadministrateur, elle, peut être longue et n'a pas à
+       porter la comparaison. */
+    const CAPACITES = [
+      { texte: "Commandes sur mesure", module: "atelier" },
+      { texte: "Clients et mesures", module: "atelier" },
+      { texte: "Boutique publique", module: "vitrine" },
+      { texte: "Stock et ventes au comptoir", module: "vitrine" },
+      { texte: "Recettes et dépenses", module: null },
+    ];
+
+    const carteFormule = (f) => {
+      const inclus = (c) =>
+        !c.module ||
+        (c.module === "atelier" ? Store.formuleOuvreAtelier(f.code)
+                                : Store.formuleOuvreVitrine(f.code));
+      return (
+        '<button type="button" class="formule" data-formule="' + e(f.code) + '" ' +
+            'role="radio" aria-checked="false">' +
+          '<span class="formule-tete">' +
+            '<span class="formule-nom">' + e(f.nom) + "</span>" +
+            '<span class="formule-prix">' +
+              Utils.fmtMontant(Number(f.prix_mensuel) || 0, "FCFA") +
+              "<small>par mois</small></span>" +
+          "</span>" +
+          /* Pas de description ici : elle répéterait la liste ci-dessous.
+             Elle a sa place sur l'écran d'inscription, où elle présente
+             la formule au lieu de servir à la comparer. */
+          '<span class="formule-liste">' +
+            CAPACITES.map((c) =>
+              '<span class="' + (inclus(c) ? "oui" : "non") + '">' +
+                UI.icone(inclus(c) ? "check" : "fermer", "ic-sm") +
+                e(c.texte) + "</span>"
+            ).join("") +
+          "</span>" +
+        "</button>"
+      );
+    };
 
     vue.innerHTML =
       '<div class="carte carte-accroche">' +
@@ -188,7 +222,9 @@ const VueInscription = (() => {
       '<form id="form-maison">' +
         '<div class="carte">' +
           '<div class="carte-titre">' + UI.icone("argent", "ic-sm") + "Formule</div>" +
-          '<div id="liste-formules">' + formules.map(carteFormule).join("") + "</div>" +
+          '<div id="liste-formules" class="formules" role="radiogroup" ' +
+            'aria-label="Choix de la formule">' +
+            formules.map(carteFormule).join("") + "</div>" +
         "</div>" +
 
         '<div class="carte">' +
@@ -216,9 +252,13 @@ const VueInscription = (() => {
 
     function marquerChoix() {
       for (const bouton of document.querySelectorAll("[data-formule]")) {
-        bouton.classList.toggle("choisie", bouton.dataset.formule === choisie);
+        const active = bouton.dataset.formule === choisie;
+        bouton.classList.toggle("choisie", active);
+        bouton.setAttribute("aria-checked", active ? "true" : "false");
       }
       const f = formules.find((x) => x.code === choisie);
+      /* Le montant sur le bouton : on sait ce qu'on engage au moment de
+         cliquer, sans remonter à la carte choisie. */
       UI.$("#fm-ouvrir").textContent = "Ouvrir ma maison — " +
         Utils.fmtMontant(Number(f.prix_mensuel) || 0, "FCFA") + " / mois";
     }
