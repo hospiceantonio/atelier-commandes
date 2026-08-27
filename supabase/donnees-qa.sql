@@ -7,26 +7,25 @@
 -- habituellement une galerie (abonnement expiré, prix masqué,
 -- nom à rallonge, produit sans photo, rupture de stock).
 --
--- ⚠ CE JEU CRÉE DES ATELIERS PUBLICS. Sur votre base de production,
---   ils apparaîtraient à tous vos visiteurs, à côté de vos vrais
---   ateliers. Deux façons de travailler proprement :
+-- Ce jeu crée des ateliers PUBLICS : dès l'exécution, ils s'affichent
+-- dans la vitrine à côté de vos vrais ateliers. C'est voulu — c'est ce
+-- qui permet d'éprouver la galerie — mais gardez-le en tête si des
+-- visiteurs passent pendant vos essais.
 --
---   • idéalement, sur un second projet Supabase dédié aux essais ;
---   • sinon, sur la production, mais alors : rendez-les visibles le
---     temps du test, puis masquez-les ou supprimez-les.
---
--- Tout est marqué « [QA] » : rien de ce script ne touche à vos
--- données réelles, et la suppression est exacte.
+-- Tout est marqué « [QA] ». Rien ici ne touche à vos données réelles :
+-- ni vos ateliers, ni vos clients, ni vos commandes, ni vos ventes. La
+-- suppression ci-dessous est exacte, et n'emporte que ce jeu.
 --
 -- ---------- LES TROIS COMMANDES À RETENIR ----------
 --
---   -- Rendre visible le temps du test
---   update public.ateliers set abonnement_fin = now() + interval '30 days'
---   where nom like '[QA]%';
---
---   -- Masquer à nouveau (les données restent)
+--   -- Masquer le jeu (les données restent, rien n'est perdu)
 --   update public.ateliers set abonnement_fin = now() - interval '1 day'
 --   where nom like '[QA]%';
+--
+--   -- Le rendre visible à nouveau. « Maison Expirée » est écartée à
+--   -- dessein : c'est le cas limite du jeu, elle doit rester expirée.
+--   update public.ateliers set abonnement_fin = now() + interval '30 days'
+--   where nom like '[QA]%' and nom <> '[QA] Maison Expirée';
 --
 --   -- Tout supprimer (produits, photos et ventes suivent en cascade)
 --   delete from public.ateliers where nom like '[QA]%';
@@ -654,3 +653,18 @@ commit;
 --
 -- Les visuels sont des motifs wax en SVG : légers, et on ne les
 -- confond pas avec de vraies photos d'atelier.
+
+-- ---------- Contrôle après exécution ----------
+--
+-- À exécuter juste après, pour voir ce que le public verra vraiment.
+-- « Maison Expirée » ne doit PAS y figurer ; vos vrais ateliers, si.
+
+select a.nom,
+       case when a.nom like '[QA]%' then 'jeu QA' else 'votre atelier' end as origine,
+       date_trunc('day', a.abonnement_fin) as echeance,
+       count(p.id) as realisations
+from public.ateliers a
+left join public.produits p on p.atelier_id = a.id
+where a.abonnement_fin > now()
+group by a.id, a.nom, a.abonnement_fin
+order by origine, a.nom;
