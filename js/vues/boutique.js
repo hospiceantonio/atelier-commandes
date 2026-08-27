@@ -211,7 +211,13 @@ const VueBoutique = (() => {
         ", vue sur l'application Atelier.\nEst-elle disponible ?";
     }
 
+    /* Une seule colonne sur téléphone. Sur grand écran, .fiche-produit
+       met la photo à gauche et le prix + le bouton à droite, tout de
+       suite visibles (voir styles.css). */
     vue.innerHTML =
+      '<div class="fiche-produit">' +
+
+      '<div class="fiche-media">' +
       (images.length
         ? '<div class="slider" id="slider-produit">' +
             images.map((src, i) => '<img src="' + src + '" alt="Photo ' + (i + 1) + '" data-voir="' + i + '">').join("") +
@@ -221,8 +227,10 @@ const VueBoutique = (() => {
               " photos — faites glisser, touchez pour agrandir</div>"
             : '<div class="aide" style="text-align:center;margin-top:6px">Touchez la photo pour l\'agrandir</div>')
         : '<div class="produit-photo produit-photo-vide" style="border-radius:var(--r)">' + UI.icone("image") + "</div>") +
+      "</div>" +
 
-      '<div class="carte" style="margin-top:12px">' +
+      '<div class="fiche-infos">' +
+      '<div class="carte">' +
         '<div class="paires">' +
           '<div class="paire"><span class="l">Réalisation</span><span class="v">' + e(p.nom) + "</span></div>" +
           (p.code ? '<div class="paire"><span class="l">Code</span><span class="v">' + e(p.code) + "</span></div>" : "") +
@@ -248,7 +256,10 @@ const VueBoutique = (() => {
             "</span>" +
             UI.icone("retour", "ic-sm") +
           "</button>"
-        : "");
+        : "") +
+      "</div>" +
+
+      "</div>";
 
     const slider = UI.$("#slider-produit");
     if (slider) {

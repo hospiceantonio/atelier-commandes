@@ -348,7 +348,9 @@ details.bloc > .contenu{padding:0 14px 14px}
 }
 .vide .ic{width:44px;height:44px;margin:0 auto 12px;stroke-width:1.3;color:var(--indigo-500);opacity:.6}
 .vide p{margin:0 0 4px;font-size:14.5px;font-weight:600;color:var(--encre-douce)}
-.vide small{font-size:12.5px}
+/* En bloc : sinon, sur un écran large où la note tient sur une ligne,
+   le bouton se plaçait à sa suite et chevauchait le texte. */
+.vide small{display:block;font-size:12.5px}
 .vide .btn{margin-top:16px}
 
 /* ---------- Barre de recherche ---------- */
@@ -435,6 +437,10 @@ details.bloc > .contenu{padding:0 14px 14px}
 .produit-atelier{font-size:11.5px;color:var(--encre-tres-douce);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .produit-prix{font-size:13px;font-weight:750;color:var(--indigo-800);margin-top:2px}
 .produit-prix-demande{font-size:12px;font-weight:600;color:var(--or-fonce);margin-top:2px}
+/* Fiche produit : une colonne ici, deux sur grand écran. L'écart entre
+   la photo et le bloc prix était porté par « .vue > * + * » avant que
+   les deux ne soient regroupés — on le rétablit explicitement. */
+.fiche-infos > .carte:first-child{margin-top:12px}
 .slider{
   display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;
   border-radius:var(--r);-webkit-overflow-scrolling:touch;scrollbar-width:none;
@@ -526,6 +532,77 @@ details.bloc > .contenu{padding:0 14px 14px}
 @media (min-width:640px){
   .tuiles{grid-template-columns:repeat(4,1fr)}
   .vue{padding-left:20px;padding-right:20px}
+}
+
+/* =========================================================
+   Grand écran — l'application reste la même, seule sa mise
+   en page change : navigation en haut, contenu plus large,
+   plusieurs réalisations par rangée, fiche en deux colonnes.
+   Rien ici ne s'applique au téléphone ni à l'APK Android.
+   ========================================================= */
+@media (min-width:900px){
+  :root{ --nav-h:58px; --large:1100px; }
+
+  /* La barre d'onglets est en dernier dans le HTML : « order » la
+     remonte en haut sans toucher au balisage ni à l'ordre de lecture. */
+  body{display:flex;flex-direction:column;min-height:100vh}
+  .vue{flex:1}
+
+  .tabbar{
+    order:-1;
+    position:sticky;top:0;bottom:auto;z-index:45;
+    display:flex;justify-content:flex-start;align-items:center;gap:4px;
+    height:var(--nav-h);padding-bottom:0;
+    /* Bandeau pleine largeur. Le retrait vise le texte des liens, pas
+       leur pastille : d'où les 14px de leur propre padding retirés. */
+    padding-inline:max(10px, calc((100% - var(--large)) / 2 + 24px - 14px));
+    border-top:0;border-bottom:1px solid var(--trait);
+  }
+  .tabbar a{
+    flex-direction:row;gap:8px;height:38px;padding:0 14px;
+    border-radius:10px;font-size:13.5px;
+  }
+  .tabbar a:hover{background:var(--indigo-50);color:var(--indigo-700)}
+  .tabbar a.actif{background:var(--indigo-100);color:var(--indigo-700)}
+  .tabbar .ic{width:18px;height:18px}
+  /* Le bouton rond « Nouveau » redevient un bouton de barre. */
+  .tab-cta-rond{width:34px;height:34px;margin-bottom:0;box-shadow:none}
+  .tab-cta-rond .ic{width:19px;height:19px}
+
+  /* L'entête garde son bandeau pleine largeur, mais son texte
+     s'aligne enfin sur la colonne de contenu. */
+  .topbar{top:var(--nav-h);border-radius:0;padding-inline:0}
+  .topbar-ligne{max-width:var(--large);margin:0 auto;padding-inline:24px}
+  /* Le superadministrateur n'a pas de menu : sans cela, la place qui lui
+     était réservée laissait un bandeau blanc au-dessus de l'entête. */
+  .mode-superadmin .topbar{top:0}
+
+  .vue{
+    max-width:var(--large);
+    padding:22px 24px 48px;   /* plus de place réservée à la barre du bas */
+  }
+
+  /* Trois puis quatre réalisations par rangée. */
+  .grille-produits{grid-template-columns:repeat(3,1fr);gap:18px}
+  .produit-nom{font-size:14.5px}
+  .produit-prix{font-size:14px}
+
+  /* Le carrousel « à la une » devient une bannière, plus un pavé. */
+  .carte-avant{aspect-ratio:auto;height:360px}
+  .carte-avant-voile{padding:34px 20px 16px}
+
+  /* Fiche produit : photo à gauche, prix et bouton visibles à droite. */
+  .fiche-produit{
+    display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
+    gap:26px;align-items:start;
+  }
+  .fiche-media .slider img{aspect-ratio:auto;height:min(68vh,540px)}
+  .fiche-infos{position:sticky;top:calc(var(--nav-h) + 22px)}
+  .fiche-infos > .carte:first-child{margin-top:0}
+}
+
+@media (min-width:1280px){
+  .grille-produits{grid-template-columns:repeat(4,1fr)}
 }
 
 @media (prefers-reduced-motion:reduce){
