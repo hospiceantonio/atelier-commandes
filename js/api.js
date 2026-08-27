@@ -198,6 +198,17 @@ const Api = (() => {
     return verifier(await requete) || [];
   }
 
+  /**
+   * Une tranche de lignes seulement (bornes incluses). La vitrine s'en
+   * sert pour ne pas rapatrier tout le catalogue — et ses photos — au
+   * premier écran.
+   */
+  async function listerTranche(table, colonneOrdre, ascendant, debut, fin) {
+    let requete = client.from(table).select("*");
+    if (colonneOrdre) requete = requete.order(colonneOrdre, { ascending: !!ascendant });
+    return verifier(await requete.range(debut, fin)) || [];
+  }
+
   async function listerPar(table, colonne, valeur, colonneOrdre, ascendant) {
     let requete = client.from(table).select("*").eq(colonne, valeur);
     if (colonneOrdre) requete = requete.order(colonneOrdre, { ascending: !!ascendant });
@@ -237,6 +248,6 @@ const Api = (() => {
     lireParametres, majParametres, estAdmin,
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
     creerCompte, creerCompteAdmin, deconnexion,
-    lister, listerPar, lireLigne, inserer, mettreAJour, supprimerLigne, rpc,
+    lister, listerTranche, listerPar, lireLigne, inserer, mettreAJour, supprimerLigne, rpc,
   };
 })();

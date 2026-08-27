@@ -65,11 +65,12 @@ const VueBoutique = (() => {
   const fmtPrix = (p, atelier) =>
     Utils.fmtMontant(p.prix, (atelier && atelier.devise) || "FCFA");
 
-  function carteProduit(p, atelier) {
+  function carteProduit(p, atelier, vedette) {
     return (
-      '<a class="carte-produit" href="#/produit/' + p.id + '">' +
+      '<a class="carte-produit' + (vedette ? " vedette" : "") + '" href="#/produit/' + p.id + '">' +
         (p.couverture
-          ? '<img class="produit-photo" src="' + p.couverture + '" alt="" loading="lazy">'
+          ? '<img class="produit-photo" src="' + p.couverture + '" alt="" ' +
+            'loading="lazy" decoding="async">'
           : '<span class="produit-photo produit-photo-vide">' + UI.icone("image") + "</span>") +
         '<span class="produit-infos">' +
           '<span class="produit-nom">' + e(p.nom) + "</span>" +
@@ -139,22 +140,98 @@ const VueBoutique = (() => {
     );
   }
 
+  /* ---------- Accueil : carrousel, galerie infinie, invitations ----------
+
+     Le catalogue n'est plus rapatrié d'un bloc : les réalisations
+     arrivent par lots à mesure que le visiteur descend, et leurs photos
+     ne sont décodées qu'à l'approche. Avec des centaines de modèles et
+     des photos en base64, tout charger d'un coup coûtait cher pour un
+     premier écran que personne ne dépasse forcément. */
+
+  const PAR_LOT = 12;
+
+  /* Les invitations ne sont pas une bande à part : ce sont des tuiles de
+     la galerie, rencontrées au fil du défilement. */
+  const INVITATIONS = [
+    { chapeau: "Vous cousez déjà", titre: "Votre maison mérite cette vitrine",
+      texte: "Publiez vos modèles, recevez les commandes sur WhatsApp, suivez vos mesures." },
+    { chapeau: "Essai libre", titre: "Quatorze jours pour vous décider",
+      texte: "Aucun engagement. Vous publiez, vous voyez ce que ça donne." },
+    { chapeau: "Déjà des maisons à Cotonou", titre: "Rejoignez-les",
+      texte: "Les ateliers d'ici reçoivent leurs commandes sur cette page chaque semaine." },
+  ];
+
+  function lienInscription() {
+    const prm = Api.lireParametres();
+    const numero = prm && prm.contact_whatsapp ? prm.contact_whatsapp : "";
+    if (!numero) return "#/connexion";
+    return Utils.lienWhatsApp(numero,
+      "Bonjour 👋 Je suis un atelier / styliste et je souhaite " +
+      "enregistrer ma maison sur l'application Atelier.", "229");
+  }
+
+  function carteInvitation(n) {
+    const inv = INVITATIONS[n % INVITATIONS.length];
+    const lien = lienInscription();
+    const externe = lien.indexOf("#/") !== 0;
+    return (
+      '<div class="carte-invite">' +
+        '<span class="invite-chapeau">' + e(inv.chapeau) + "</span>" +
+        '<span class="invite-titre">' + e(inv.titre) + "</span>" +
+        '<span class="invite-texte">' + e(inv.texte) + "</span>" +
+        '<a class="invite-bouton" href="' + e(lien) + '"' +
+          (externe ? ' target="_blank" rel="noopener"' : "") + ">Ouvrir ma maison</a>" +
+      "</div>"
+    );
+  }
+
+  function blocFinal(nbAteliers, nbProduits) {
+    const lien = lienInscription();
+    const externe = lien.indexOf("#/") !== 0;
+    return (
+      '<section class="cloture">' +
+        '<span class="invite-chapeau">Vous êtes une maison de mode</span>' +
+        "<h2>Vos modèles méritent mieux qu'un fil WhatsApp</h2>" +
+        "<p>Publiez vos réalisations, recevez les commandes, suivez vos mesures " +
+          "et vos recettes. Vos clients vous trouvent ici ; vous gardez la main " +
+          "sur tout le reste.</p>" +
+        '<div class="chiffres">' +
+          '<div><div class="chiffre-valeur">' + nbAteliers + "</div>" +
+            '<div class="chiffre-libelle">Maison' + (nbAteliers > 1 ? "s" : "") + "</div></div>" +
+          '<div><div class="chiffre-valeur">' + nbProduits + "</div>" +
+            '<div class="chiffre-libelle">Modèle' + (nbProduits > 1 ? "s" : "") + " publié" +
+              (nbProduits > 1 ? "s" : "") + "</div></div>" +
+        "</div>" +
+        '<a class="btn btn-or" href="' + e(lien) + '"' +
+          (externe ? ' target="_blank" rel="noopener"' : "") + ">Ouvrir ma maison</a>" +
+      "</section>"
+    );
+  }
+
   async function accueil(vue) {
-    const { produits, parId } = await chargerCatalogue();
+    const ateliers = await Api.lister("ateliers_publics", "nom", true);
+    const parId = {};
+    for (const a of ateliers) parId[a.id] = a;
+
     let bannieres = [];
     try {
       bannieres = (await Api.lister("bannieres", "position", true)).filter((b) => b.active);
     } catch (_) { /* base pas encore à jour : pas de bannière */ }
 
+    /* Le premier lot sert à décider quoi afficher : les mises en avant
+       viennent de la première page, pas d'un second appel complet. */
+    const premier = await Api.listerTranche("produits", "cree_le", false, 0, PAR_LOT - 1);
+    const visibles = (liste) => liste.filter((p) => parId[p.atelier_id]);
+
     UI.entete({ titre: "Atelier", sous: "Les réalisations de nos ateliers de couture" });
 
-    if (!produits.length && !bannieres.length) {
+    if (!premier.length && !bannieres.length) {
       vue.innerHTML = UI.vide("image", "Aucune réalisation publiée",
         "Les ateliers ajouteront bientôt leurs créations — revenez vite !");
       return;
     }
 
-    const enAvant = produits.filter((p) => p.en_avant);
+    const enAvant = visibles(premier).filter((p) => p.en_avant);
     const carrousel = bannieres.map(carteBanniere)
       .concat(enAvant.map((p) => carteAvant(p, parId[p.atelier_id])));
 
@@ -166,19 +243,104 @@ const VueBoutique = (() => {
             ? '<div class="carrousel-points" id="carrousel-points" aria-hidden="true">' +
                 carrousel.map(() => '<span class="carrousel-point"></span>').join("") +
               "</div>"
-            : "") +
-          (produits.length ? '<div class="titre-categorie">Toutes les réalisations</div>' : "")
+            : "")
         : "") +
-      (produits.length
-        ? '<div class="grille-produits">' +
-            produits.map((p) => carteProduit(p, parId[p.atelier_id])).join("") +
-          "</div>"
-        : "");
+      /* Sans aucune réalisation à montrer, ni titre ni grille vide : on
+         le dit, et l'invitation aux maisons prend tout son sens. */
+      (visibles(premier).length
+        ? '<div class="titre-categorie">Toutes les réalisations</div>' +
+          '<div class="grille-produits" id="galerie"></div>' +
+          '<div id="sentinelle" style="height:1px"></div>' +
+          '<div class="galerie-attente" id="attente" hidden>' +
+            '<span class="rondelle"></span><span>Chargement des modèles…</span></div>'
+        : UI.vide("image", "Aucune réalisation publiée",
+            "Les maisons ajouteront bientôt leurs créations — revenez vite !")) +
+      '<div id="galerie-fin"></div>';
+
+    const galerie = UI.$("#galerie");
+    const attente = UI.$("#attente");
+    const fin = UI.$("#galerie-fin");
+
+    /* Rien à galerie : l'invitation reste, le reste n'a pas lieu d'être. */
+    if (!galerie) {
+      fin.innerHTML = blocFinal(ateliers.length, 0);
+      brancherCarrousel();
+      return;
+    }
+
+    let poses = 0;
+    let lots = 0;
+    let demandes = premier.length;
+    let epuise = false;
+    let enCours = false;
+
+    function ajouter(liste) {
+      const html = [];
+      for (const p of liste) {
+        html.push(carteProduit(p, parId[p.atelier_id], poses % 7 === 3));
+        poses++;
+      }
+      /* Une invitation tous les deux lots : assez pour être vue, assez
+         rare pour ne pas hacher la galerie. */
+      if (lots % 2 === 1) html.push(carteInvitation(Math.floor(lots / 2)));
+      galerie.insertAdjacentHTML("beforeend", html.join(""));
+      lots++;
+    }
+
+    ajouter(visibles(premier));
+    if (premier.length < PAR_LOT) epuise = true;
+
+    function terminer() {
+      epuise = true;
+      observateur.disconnect();
+      attente.hidden = true;
+      if (!fin.innerHTML) fin.innerHTML = blocFinal(ateliers.length, poses);
+    }
+
+    async function lotSuivant() {
+      /* On demande à partir du nombre de lignes déjà demandées, pas
+         posées : les produits d'ateliers expirés sont écartés à
+         l'affichage mais comptent dans la pagination du serveur. */
+      const tranche = await Api.listerTranche("produits", "cree_le", false,
+        demandes, demandes + PAR_LOT - 1);
+      demandes += tranche.length;
+      if (!tranche.length) { terminer(); return; }
+      ajouter(visibles(tranche));
+      if (tranche.length < PAR_LOT) terminer();
+    }
+
+    const observateur = new IntersectionObserver(async (entrees) => {
+      if (!entrees[0].isIntersecting || enCours) return;
+      if (epuise) { terminer(); return; }
+      enCours = true;
+      attente.hidden = false;
+      try {
+        await lotSuivant();
+      } catch (err) {
+        UI.toast(err.message || "Chargement impossible", "erreur");
+        terminer();
+      }
+      enCours = false;
+      if (epuise) return;
+      attente.hidden = true;
+      /* La sentinelle peut rester visible d'un lot au suivant : un
+         observateur ne signale que les changements, il ne redirait donc
+         rien et le défilement s'arrêterait là. On réarme. */
+      observateur.unobserve(sentinelle);
+      observateur.observe(sentinelle);
+    }, { rootMargin: "600px 0px" });
+
+    const sentinelle = UI.$("#sentinelle");
+    if (epuise) terminer();
+    else observateur.observe(sentinelle);
+
+    brancherCarrousel();
 
     /* Le lien s'ouvre dans le navigateur (window.open passe par le pont
        Android, qui le confie au système). */
-    const zone = UI.$("#carrousel-avant");
-    if (zone) {
+    function brancherCarrousel() {
+      const zone = UI.$("#carrousel-avant");
+      if (!zone) return;
       zone.addEventListener("click", (ev) => {
         const banniere = ev.target.closest("[data-lien]");
         if (banniere) window.open(banniere.dataset.lien, "_blank");

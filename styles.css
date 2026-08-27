@@ -437,6 +437,73 @@ details.bloc > .contenu{padding:0 14px 14px}
 .produit-atelier{font-size:11.5px;color:var(--encre-tres-douce);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .produit-prix{font-size:13px;font-weight:750;color:var(--indigo-800);margin-top:2px}
 .produit-prix-demande{font-size:12px;font-weight:600;color:var(--or-fonce);margin-top:2px}
+
+/* Une réalisation sur sept prend la place de quatre : c'est ce qui donne
+   son rythme à la galerie, sans mise en page en maçonnerie fragile. */
+.carte-produit.vedette{grid-column:span 2;grid-row:span 2}
+.carte-produit.vedette .produit-photo{aspect-ratio:1/1}
+.carte-produit.vedette .produit-nom{font-size:16px;white-space:normal}
+.carte-produit.vedette .produit-prix{font-size:15px}
+.carte-produit.vedette .produit-infos{padding:12px 14px 14px}
+
+/* L'invitation aux maisons est une tuile de la galerie, pas une bande
+   qu'on saute : on la rencontre en regardant les modèles. */
+.carte-invite{
+  grid-column:span 2;
+  display:flex;flex-direction:column;justify-content:center;gap:7px;
+  padding:20px;border-radius:var(--r);
+  background:linear-gradient(135deg,var(--indigo-800),var(--indigo-900));
+  color:#fff;box-shadow:var(--ombre);
+}
+.invite-chapeau{
+  font-size:10.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--or);
+}
+.invite-titre{font-size:18px;font-weight:750;line-height:1.2}
+.invite-texte{font-size:13px;line-height:1.5;color:rgba(255,255,255,.78)}
+.invite-bouton{
+  align-self:flex-start;margin-top:6px;
+  padding:10px 18px;border-radius:999px;
+  background:var(--or);color:#2A1F02;font-weight:800;font-size:14px;
+}
+.invite-bouton:active{transform:scale(.97)}
+
+/* Attente entre deux lots de la galerie. */
+.galerie-attente{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:26px 0;color:var(--encre-tres-douce);font-size:13.5px;font-weight:600;
+}
+/* Sans cette ligne, le « display:flex » ci-dessus l'emporte sur la règle
+   du navigateur pour [hidden] : le voyant restait affiché une fois la
+   galerie chargée. */
+.galerie-attente[hidden]{display:none}
+.rondelle{
+  width:16px;height:16px;border-radius:50%;
+  border:2.5px solid var(--trait);border-top-color:var(--indigo-700);
+  animation:rondelle-tourne .7s linear infinite;
+}
+@keyframes rondelle-tourne{to{transform:rotate(360deg)}}
+
+/* Fin de galerie : l'invitation devient une adresse à part entière. */
+.cloture{
+  margin:26px 0 6px;padding:26px 22px;
+  border-radius:var(--r-lg);
+  background:linear-gradient(135deg,var(--indigo-800),var(--indigo-900));
+  color:#fff;box-shadow:var(--ombre-forte);
+}
+.cloture h2{font-size:23px;font-weight:750;line-height:1.15;margin:8px 0 0}
+.cloture p{font-size:14px;line-height:1.55;color:rgba(255,255,255,.78);margin:10px 0 0}
+.chiffres{
+  display:flex;flex-wrap:wrap;gap:32px;
+  margin:20px 0 22px;padding-top:18px;
+  border-top:1px solid rgba(255,255,255,.16);
+}
+.chiffre-valeur{font-size:30px;font-weight:800;color:var(--or);font-variant-numeric:tabular-nums;line-height:1}
+.chiffre-libelle{
+  font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:rgba(255,255,255,.6);margin-top:6px;
+}
+.cloture .btn-or{display:inline-flex;width:auto;padding:13px 26px;border-radius:999px}
 /* Fiche produit : une colonne ici, deux sur grand écran. L'écart entre
    la photo et le bloc prix était porté par « .vue > * + * » avant que
    les deux ne soient regroupés — on le rétablit explicitement. */
