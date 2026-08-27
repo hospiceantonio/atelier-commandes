@@ -10,6 +10,8 @@ const VueReglages = (() => {
     const r = Store.lireReglages();
     const profil = Api.lireProfil();
     let logoDataUrl = r.logo || "";
+    let logoFichier = null;      /* déposé seulement à l'enregistrement */
+    let logoEnBase = r.logo || "";  /* pour retirer l'ancien fichier du bucket */
 
     UI.entete({ titre: "Réglages", sous: r.nomAtelier, retour: true });
 
@@ -51,7 +53,8 @@ const VueReglages = (() => {
           '<div class="carte-titre">' + UI.icone("crayon", "ic-sm") + "Personnalisation</div>" +
           '<div class="champ"><label>Logo de l\'atelier</label>' +
             '<div style="display:flex;align-items:center;gap:12px">' +
-              '<img id="perso-logo-apercu" class="logo-apercu" alt=""' + (logoDataUrl ? ' src="' + logoDataUrl + '"' : " hidden") + ">" +
+              '<img id="perso-logo-apercu" class="logo-apercu" alt=""' +
+                (logoDataUrl ? ' src="' + Stockage.src(logoDataUrl) + '"' : " hidden") + ">" +
               '<button type="button" class="btn btn-clair btn-sm" id="perso-logo-choisir">Choisir</button>' +
               '<button type="button" class="btn btn-danger btn-sm" id="perso-logo-retirer"' + (logoDataUrl ? "" : " hidden") + ">Retirer</button>" +
             "</div>" +
@@ -116,6 +119,7 @@ const VueReglages = (() => {
     UI.$("#perso-logo-choisir").onclick = () => champLogo.click();
     retirer.onclick = () => {
       logoDataUrl = "";
+      logoFichier = null;
       apercu.hidden = true;
       retirer.hidden = true;
     };
@@ -125,6 +129,9 @@ const VueReglages = (() => {
       if (!fichier) return;
       try {
         const { dataUrl } = await Utils.compresserImage(fichier, 400, 0.82);
+        /* L'aperçu est immédiat ; le dépôt n'a lieu qu'à l'enregistrement,
+           pour ne rien laisser dans le bucket si l'on renonce. */
+        logoFichier = fichier;
         logoDataUrl = dataUrl;
         apercu.src = dataUrl;
         apercu.hidden = false;
@@ -137,8 +144,23 @@ const VueReglages = (() => {
     UI.$("#form-perso").addEventListener("submit", async (ev) => {
       ev.preventDefault();
       try {
+        let logo = logoDataUrl;
+        if (logoFichier) {
+          logo = await Stockage.deposerImage(logoFichier, Stockage.VITRINE, "logo",
+            { coteMax: 400, qualite: 0.82 });
+          /* Déposé : le formulaire porte désormais le chemin, pas l'aperçu.
+             Sans cela, un second enregistrement réécrirait la data-url. */
+          logoFichier = null;
+          logoDataUrl = logo;
+        }
+        /* Un logo remplacé ou retiré n'a plus rien qui le désigne : sans
+           cela chaque changement en laisserait un dans le bucket. */
+        if (logoEnBase && logoEnBase !== logo) {
+          await Stockage.retirer([logoEnBase], Stockage.VITRINE);
+        }
+        logoEnBase = logo;
         await Store.majReglages({
-          logo: logoDataUrl,
+          logo,
           slogan: UI.$("#perso-slogan").value.trim(),
           telWhatsAppAtelier: UI.$("#perso-wa").value.trim(),
           telAppelAtelier: UI.$("#perso-appel").value.trim(),

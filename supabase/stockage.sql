@@ -3,16 +3,20 @@
 -- À coller dans : Supabase -> SQL Editor -> Run
 -- =========================================================
 --
--- Aujourd'hui, toutes les images de l'application sont rangées en base
--- sous forme de data-url (base64) : logos, couvertures, photos de
--- réalisations, photos de commandes, bannières. C'est simple, mais ça
--- alourdit chaque ligne lue et gonfle la base — la vitrine paie ce prix
--- à chaque écran.
+-- Les images étaient rangées en base sous forme de data-url (base64) :
+-- logos, couvertures, photos de réalisations, photos de commandes,
+-- bannières. C'est simple, mais chaque ligne lue transportait sa photo
+-- entière — la vitrine payait ce prix à chaque écran.
 --
--- Ces trois buckets préparent le passage au stockage de fichiers. Le
--- script ne migre rien et ne casse rien : il crée les contenants et
--- leurs règles d'accès. L'application continue de fonctionner comme
--- avant tant qu'elle n'y écrit pas.
+-- L'application dépose désormais ses images dans ces trois buckets et ne
+-- garde en base qu'un chemin. CE SCRIPT EST DONC UN PRÉALABLE : sans
+-- lui, les envois de photos échouent.
+--
+-- Rien n'est migré, et rien n'est cassé. Une colonne d'image peut
+-- contenir une data-url (l'ancien format, affiché tel quel) ou un chemin
+-- (le nouveau, résolu par js/stockage.js). Les photos déjà en base
+-- continuent donc de s'afficher, sans reprise ni interruption ; seuls
+-- les nouveaux envois vont dans les buckets.
 --
 -- Le script est rejouable sans danger.
 --
@@ -20,10 +24,15 @@
 --
 -- Chaque fichier est rangé sous l'identifiant de son atelier :
 --
---     vitrine/{atelier_id}/produits/{produit_id}/{fichier}.webp
---     vitrine/{atelier_id}/logo.webp
---     commandes/{atelier_id}/{commande_id}/{fichier}.webp
---     bannieres/{banniere_id}.webp
+--     vitrine/{atelier_id}/produits/{jeton}.jpg
+--     vitrine/{atelier_id}/couvertures/{jeton}.jpg
+--     vitrine/{atelier_id}/logo/{jeton}.jpg
+--     commandes/{atelier_id}/{commande_id}/{jeton}.jpg
+--     bannieres/{jeton}.jpg
+--
+-- Le jeton est tiré à chaque envoi : deux versions d'une même image ne
+-- partagent jamais un chemin, donc aucun cache à invalider. Les fichiers
+-- sont écrits en JPEG, compressés par le navigateur avant l'envoi.
 --
 -- Les règles ci-dessous lisent le PREMIER dossier du chemin et le
 -- comparent à l'atelier de la session. Un atelier ne peut donc ni
@@ -75,18 +84,25 @@ drop policy if exists vitrine_depot on storage.objects;
 create policy vitrine_depot on storage.objects for insert to authenticated
   with check (
     bucket_id = 'vitrine'
-    and (storage.foldername(name))[1] = public.atelier_courant()::text
+    and (
+      (storage.foldername(name))[1] = public.atelier_courant()::text
+      -- Le superadministrateur pose le logo d'un atelier qu'il crée : il
+      -- n'a pas d'atelier_id, la règle ci-dessus le refuserait.
+      or public.role_courant() = 'superadmin'
+    )
   );
 
 drop policy if exists vitrine_remplacement on storage.objects;
 create policy vitrine_remplacement on storage.objects for update to authenticated
   using (
     bucket_id = 'vitrine'
-    and (storage.foldername(name))[1] = public.atelier_courant()::text
+    and ((storage.foldername(name))[1] = public.atelier_courant()::text
+         or public.role_courant() = 'superadmin')
   )
   with check (
     bucket_id = 'vitrine'
-    and (storage.foldername(name))[1] = public.atelier_courant()::text
+    and ((storage.foldername(name))[1] = public.atelier_courant()::text
+         or public.role_courant() = 'superadmin')
   );
 
 drop policy if exists vitrine_suppression on storage.objects;
@@ -95,8 +111,11 @@ drop policy if exists vitrine_suppression on storage.objects;
 create policy vitrine_suppression on storage.objects for delete to authenticated
   using (
     bucket_id = 'vitrine'
-    and (storage.foldername(name))[1] = public.atelier_courant()::text
-    and public.est_admin()
+    and (
+      ((storage.foldername(name))[1] = public.atelier_courant()::text
+       and public.est_admin())
+      or public.role_courant() = 'superadmin'
+    )
   );
 
 -- ---------- commandes (privé) ----------
@@ -164,6 +183,13 @@ order by policyname;
 --   restent atteignables par leur URL directe si on la connaît. Pour la
 --   vitrine c'est sans conséquence ; c'est pourquoi les photos de
 --   commandes, elles, sont dans un bucket privé.
+--
+-- • L'application retire les fichiers en même temps que les lignes qui
+--   les désignent : photo de commande supprimée, réalisation retirée,
+--   logo remplacé, bannière effacée. Une exception reste : quand vous
+--   supprimez un atelier entier, la cascade efface ses lignes mais pas
+--   ses fichiers. Ils sont tous sous vitrine/{atelier_id}/ et
+--   commandes/{atelier_id}/, à retirer depuis Storage si le quota serre.
 --
 -- • Le quota gratuit de Supabase est de 1 Go. À 200 Ko par photo
 --   compressée, cela laisse environ 5 000 images — largement de quoi

@@ -102,7 +102,10 @@ const VueCommandes = (() => {
     const r = Store.lireReglages();
     const clients = await Store.listerClients();
     let clientChoisi = params.client ? clients.find((c) => c.id === params.client) || null : null;
-    const photos = []; // dataUrls en attente : la commande n'existe pas encore
+    /* { apercu, fichier } : la commande n'existe pas encore, et le chemin
+       du fichier contient son identifiant. Les photos partent donc dans
+       le bucket une fois la commande enregistrée. */
+    const photos = [];
 
     UI.entete({ titre: "Nouvelle commande", sous: "N° attribué à l'enregistrement", retour: true });
 
@@ -256,7 +259,7 @@ const VueCommandes = (() => {
       const zone = UI.$("#zone-photos");
       zone.innerHTML =
         photos.map((p, i) =>
-          '<span class="photo"><img src="' + p + '" alt="Tissu ' + (i + 1) + '">' +
+          '<span class="photo"><img src="' + p.apercu + '" alt="Tissu ' + (i + 1) + '">' +
             '<button type="button" class="photo-suppr" data-retire="' + i + '" aria-label="Retirer la photo">' +
               UI.icone("fermer") + "</button></span>"
         ).join("") +
@@ -277,8 +280,9 @@ const VueCommandes = (() => {
       prise.value = "";
       for (const fichier of fichiers) {
         try {
+          /* Un aperçu tout de suite, le fichier gardé pour l'envoi. */
           const { dataUrl } = await Utils.compresserImage(fichier);
-          photos.push(dataUrl);
+          photos.push({ apercu: dataUrl, fichier });
         } catch (_) {
           UI.toast("Photo illisible, réessayez", "erreur");
         }
@@ -344,7 +348,20 @@ const VueCommandes = (() => {
           dateLivraison: livraison,
           montant, acompte,
         });
-        for (const dataUrl of photos) await Store.ajouterPhoto(commande.id, dataUrl);
+        if (photos.length) {
+          bouton.textContent = "Envoi des photos…";
+          try {
+            for (const ph of photos) {
+              const chemin = await Stockage.deposerImage(
+                ph.fichier, Stockage.COMMANDES, commande.id);
+              await Store.ajouterPhoto(commande.id, chemin);
+            }
+          } catch (_) {
+            /* La commande est enregistrée : la refaire créerait un doublon.
+               On le dit, et l'écran de détail permet de reprendre la photo. */
+            UI.toast("Commande enregistrée, mais l'envoi des photos a échoué", "erreur");
+          }
+        }
 
         UI.toast("Commande " + commande.numero + " enregistrée", "ok");
 
@@ -420,7 +437,7 @@ const VueCommandes = (() => {
         '<div class="carte-titre">' + UI.icone("image", "ic-sm") + "Tissus (" + photos.length + ")</div>" +
         '<div class="photos" id="photos-detail">' +
           photos.map((p) =>
-            '<span class="photo"><img src="' + p.dataUrl + '" alt="Tissu" data-voir="' + p.id + '">' +
+            '<span class="photo"><img src="' + p.src + '" alt="Tissu" data-voir="' + p.id + '">' +
               '<button type="button" class="photo-suppr" data-suppr-photo="' + p.id + '" aria-label="Supprimer la photo">' +
                 UI.icone("fermer") + "</button></span>"
           ).join("") +
@@ -536,7 +553,13 @@ const VueCommandes = (() => {
           texte: "Retirer cette photo de tissu de la commande ?",
           bouton: "Supprimer", danger: true,
         });
-        if (ok) { await Store.supprimerPhoto(suppr.dataset.supprPhoto); recharger(); }
+        if (ok) {
+          /* La ligne porte le chemin du fichier : sans lui, le fichier
+             resterait dans le bucket sans plus rien pour le désigner. */
+          const photo = photos.find((p) => p.id === suppr.dataset.supprPhoto);
+          await Store.supprimerPhoto(suppr.dataset.supprPhoto, photo && photo.valeur);
+          recharger();
+        }
         return;
       }
       const voir = ev.target.closest("[data-voir]");
@@ -548,15 +571,17 @@ const VueCommandes = (() => {
     priseDetail.addEventListener("change", async () => {
       const fichiers = Array.from(priseDetail.files || []);
       priseDetail.value = "";
+      let envoyees = 0;
       for (const fichier of fichiers) {
         try {
-          const { dataUrl } = await Utils.compresserImage(fichier);
-          await Store.ajouterPhoto(id, dataUrl);
-        } catch (_) {
-          UI.toast("Photo illisible, réessayez", "erreur");
+          const chemin = await Stockage.deposerImage(fichier, Stockage.COMMANDES, id);
+          await Store.ajouterPhoto(id, chemin);
+          envoyees++;
+        } catch (err) {
+          UI.toast(err.message || "Envoi de la photo impossible", "erreur");
         }
       }
-      if (fichiers.length) { UI.toast("Photo ajoutée", "ok"); recharger(); }
+      if (envoyees) { UI.toast("Photo ajoutée", "ok"); recharger(); }
     });
 
     const boutonPaiement = UI.$("#ouvrir-paiement");

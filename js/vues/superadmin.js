@@ -120,7 +120,7 @@ const VueSuperAdmin = (() => {
         return (
           '<button type="button" class="ligne" data-nav="#/atelier-gere/' + a.id + '">' +
             (a.logo
-              ? '<span class="pastille"><img src="' + a.logo + '" alt=""></span>'
+              ? '<span class="pastille"><img src="' + Stockage.src(a.logo) + '" alt=""></span>'
               : '<span class="pastille">' + e((a.nom || "?")[0].toUpperCase()) + "</span>") +
             '<span class="ligne-corps">' +
               '<span class="ligne-titre">' + e(a.nom) + "</span>" +
@@ -145,6 +145,7 @@ const VueSuperAdmin = (() => {
     UI.entete({ titre: "Nouvel atelier", sous: "Compte administrateur + atelier", retour: true });
 
     let logoDataUrl = "";
+    let logoFichier = null;   /* déposé seulement à la création */
 
     vue.innerHTML =
       '<form id="form-atelier" novalidate>' +
@@ -201,6 +202,7 @@ const VueSuperAdmin = (() => {
     UI.$("#na-logo-choisir").onclick = () => champLogo.click();
     retirer.onclick = () => {
       logoDataUrl = "";
+      logoFichier = null;
       apercu.hidden = true;
       retirer.hidden = true;
     };
@@ -210,6 +212,7 @@ const VueSuperAdmin = (() => {
       if (!fichier) return;
       try {
         const { dataUrl } = await Utils.compresserImage(fichier, 400, 0.82);
+        logoFichier = fichier;
         logoDataUrl = dataUrl;
         apercu.src = dataUrl;
         apercu.hidden = false;
@@ -241,13 +244,21 @@ const VueSuperAdmin = (() => {
         atelier = await Api.inserer("ateliers", {
           nom: nomAtelier,
           slogan: UI.$("#na-slogan").value.trim(),
-          logo: logoDataUrl,
+          logo: "",
           tel_whatsapp: UI.$("#na-wa").value.trim(),
           tel_appel: UI.$("#na-appel").value.trim(),
           devise: UI.$("#na-devise").value.trim() || "FCFA",
           indicatif: UI.$("#na-indicatif").value.replace(/\D/g, "") || "229",
           abonnement_mensuel: abonnement,
         });
+        /* Le chemin du logo contient l'identifiant de l'atelier, qui
+           n'existe qu'une fois la ligne créée : d'où ce second temps. */
+        if (logoFichier) {
+          const chemin = await Stockage.deposerImage(logoFichier, Stockage.VITRINE,
+            "logo", { coteMax: 400, qualite: 0.82, atelierId: atelier.id });
+          atelier = await Api.mettreAJour("ateliers", atelier.id, { logo: chemin });
+        }
+
         const utilisateur = await Api.creerCompteAdmin(email, motDePasse,
           nomAdmin, UI.$("#na-tel").value.trim());
         await Api.mettreAJour("profils", utilisateur.id, { atelier_id: atelier.id });
@@ -284,7 +295,7 @@ const VueSuperAdmin = (() => {
       '<div class="carte">' +
         '<div style="display:flex;align-items:center;gap:12px">' +
           (atelier.logo
-            ? '<img src="' + atelier.logo + '" alt="" class="logo-apercu">'
+            ? '<img src="' + Stockage.src(atelier.logo) + '" alt="" class="logo-apercu">'
             : '<span class="pastille">' + e((atelier.nom || "?")[0].toUpperCase()) + "</span>") +
           '<div style="flex:1;min-width:0">' +
             '<div class="ligne-titre">' + e(atelier.nom) + "</div>" +
@@ -978,7 +989,7 @@ const VueSuperAdmin = (() => {
       '<div class="liste">' +
       liste.map((b) =>
         '<button type="button" class="ligne" data-nav="#/banniere/' + b.id + '">' +
-          '<span class="pastille"><img src="' + b.image + '" alt=""></span>' +
+          '<span class="pastille"><img src="' + Stockage.src(b.image, Stockage.BANNIERES) + '" alt=""></span>' +
           '<span class="ligne-corps">' +
             '<span class="ligne-titre">' + e(b.titre || "Sans titre") + "</span>" +
             '<span class="ligne-sous">' + e(b.lien || "Sans lien") + "</span>" +
@@ -1002,6 +1013,7 @@ const VueSuperAdmin = (() => {
       if (!banniere) { location.hash = "#/bannieres"; return; }
     }
     let imageDataUrl = banniere ? banniere.image : "";
+    let imageFichier = null;  /* déposé seulement à l'enregistrement */
 
     UI.entete({
       titre: banniere ? "Modifier la bannière" : "Nouvelle bannière",
@@ -1015,7 +1027,7 @@ const VueSuperAdmin = (() => {
           '<div class="carte-titre">' + UI.icone("image", "ic-sm") + "Image</div>" +
           '<img id="ban-apercu" alt="" style="width:100%;aspect-ratio:4/3;object-fit:cover;' +
             'border-radius:var(--r);background:var(--bleu-clair)"' +
-            (imageDataUrl ? ' src="' + imageDataUrl + '"' : " hidden") + ">" +
+            (imageDataUrl ? ' src="' + Stockage.src(imageDataUrl, Stockage.BANNIERES) + '"' : " hidden") + ">" +
           '<div class="btn-rangee" style="margin-top:10px">' +
             '<button type="button" class="btn btn-clair" id="ban-choisir">' +
               UI.icone("image", "ic-sm") + (imageDataUrl ? "Changer l'image" : "Choisir une image") + "</button>" +
@@ -1059,6 +1071,7 @@ const VueSuperAdmin = (() => {
       if (!fichier) return;
       try {
         const { dataUrl } = await Utils.compresserImage(fichier, 1000, 0.82);
+        imageFichier = fichier;
         imageDataUrl = dataUrl;
         apercu.src = dataUrl;
         apercu.hidden = false;
@@ -1080,8 +1093,19 @@ const VueSuperAdmin = (() => {
           position: Math.round(Utils.lireNombre(UI.$("#ban-position").value)),
           active: UI.$("#ban-active").checked,
         };
-        if (banniere) await Api.mettreAJour("bannieres", banniere.id, valeurs);
-        else await Api.inserer("bannieres", valeurs);
+        if (imageFichier) {
+          valeurs.image = await Stockage.deposerImage(imageFichier, Stockage.BANNIERES,
+            null, { coteMax: 1000, qualite: 0.82 });
+        }
+        if (banniere) {
+          await Api.mettreAJour("bannieres", banniere.id, valeurs);
+          /* L'image remplacée n'a plus de référence : on la retire. */
+          if (imageFichier && banniere.image !== valeurs.image) {
+            await Stockage.retirer([banniere.image], Stockage.BANNIERES);
+          }
+        } else {
+          await Api.inserer("bannieres", valeurs);
+        }
         UI.toast(banniere ? "Bannière mise à jour" : "Bannière publiée", "ok");
         location.hash = "#/bannieres";
       } catch (err) {
@@ -1100,6 +1124,7 @@ const VueSuperAdmin = (() => {
         });
         if (!ok) return;
         await Api.supprimerLigne("bannieres", banniere.id);
+        await Stockage.retirer([banniere.image], Stockage.BANNIERES);
         UI.toast("Bannière supprimée", "ok");
         location.hash = "#/bannieres";
       };

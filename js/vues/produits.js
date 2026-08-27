@@ -9,22 +9,6 @@ const VueProduits = (() => {
   const MAX_PHOTOS = 4;
 
   /** Miniature de couverture recalculée depuis la première photo. */
-  function miniature(dataUrl, taille) {
-    return new Promise((resoudre) => {
-      const img = new Image();
-      img.onload = () => {
-        const echelle = Math.min(1, (taille || 360) / Math.max(img.width, img.height));
-        const toile = document.createElement("canvas");
-        toile.width = Math.max(1, Math.round(img.width * echelle));
-        toile.height = Math.max(1, Math.round(img.height * echelle));
-        toile.getContext("2d").drawImage(img, 0, 0, toile.width, toile.height);
-        resoudre(toile.toDataURL("image/jpeg", 0.72));
-      };
-      img.onerror = () => resoudre(dataUrl);
-      img.src = dataUrl;
-    });
-  }
-
   /* ---------- Liste des réalisations de l'atelier ---------- */
 
   async function liste(vue) {
@@ -57,7 +41,7 @@ const VueProduits = (() => {
           categories[cat].map((p) =>
             '<button type="button" class="ligne" data-nav="#/produit-gere/' + p.id + '">' +
               (p.couverture
-                ? '<span class="pastille"><img src="' + p.couverture + '" alt=""></span>'
+                ? '<span class="pastille"><img src="' + Stockage.src(p.couverture) + '" alt=""></span>'
                 : '<span class="pastille">' + UI.icone("image", "ic-sm") + "</span>") +
               '<span class="ligne-corps">' +
                 '<span class="ligne-titre">' + (p.en_avant ? "★ " : "") + e(p.nom) + "</span>" +
@@ -81,12 +65,15 @@ const VueProduits = (() => {
 
   async function formulaire(vue, id) {
     let produit = null;
-    let photos = []; // dataUrls dans l'ordre d'affichage
+    /* Chaque entrée porte de quoi s'afficher tout de suite (« apercu »)
+       et de quoi être enregistrée : soit un fichier à déposer, soit la
+       valeur déjà en base — chemin de bucket ou data-url héritée. */
+    let photos = [];
     if (id) {
       produit = await Api.lireLigne("produits", id);
       if (!produit) { location.hash = "#/produits"; return; }
       photos = (await Api.listerPar("photos_produits", "produit_id", id, "position", true))
-        .map((p) => p.data_url);
+        .map((p) => ({ apercu: Stockage.src(p.data_url), valeur: p.data_url }));
     }
 
     const tous = await Api.listerPar("produits", "atelier_id", Api.atelierId());
@@ -153,7 +140,7 @@ const VueProduits = (() => {
     function afficherPhotos() {
       UI.$("#zone-photos-produit").innerHTML =
         photos.map((p, i) =>
-          '<span class="photo"><img src="' + p + '" alt="Photo ' + (i + 1) + '">' +
+          '<span class="photo"><img src="' + p.apercu + '" alt="Photo ' + (i + 1) + '">' +
             '<button type="button" class="photo-suppr" data-retire="' + i + '" aria-label="Retirer la photo">' +
             UI.icone("fermer", "ic-sm") + "</button></span>"
         ).join("") +
@@ -180,7 +167,7 @@ const VueProduits = (() => {
         if (photos.length >= MAX_PHOTOS) { UI.toast(MAX_PHOTOS + " photos maximum", "erreur"); break; }
         try {
           const { dataUrl } = await Utils.compresserImage(fichier);
-          photos.push(dataUrl);
+          photos.push({ apercu: dataUrl, fichier });
         } catch (_) {
           UI.toast("Image illisible", "erreur");
         }
@@ -199,6 +186,28 @@ const VueProduits = (() => {
       const bouton = UI.$("#prod-enregistrer");
       bouton.disabled = true;
       try {
+        /* Les nouvelles photos partent dans le bucket ; celles déjà
+           enregistrées gardent leur valeur, quelle qu'en soit la forme. */
+        bouton.textContent = "Envoi des photos…";
+        const gardees = [];
+        for (const ph of photos) {
+          gardees.push(ph.fichier
+            ? await Stockage.deposerImage(ph.fichier, Stockage.VITRINE, "produits")
+            : ph.valeur);
+        }
+
+        /* La couverture est une version réduite : la grille affiche des
+           vignettes, inutile d'y servir l'image pleine. Si la première
+           photo était déjà enregistrée, on garde la couverture existante
+           — la régénérer demanderait de retélécharger le fichier. */
+        let couverture = "";
+        if (photos.length) {
+          couverture = photos[0].fichier
+            ? await Stockage.deposerImage(photos[0].fichier, Stockage.VITRINE, "couvertures",
+                { coteMax: 420, qualite: 0.7 })
+            : ((produit && produit.couverture) || gardees[0] || "");
+        }
+
         const valeurs = {
           nom,
           code: UI.$("#prod-code").value.trim(),
@@ -207,7 +216,7 @@ const VueProduits = (() => {
           prix_visible: UI.$("#prod-prix-visible").checked,
           en_avant: UI.$("#prod-avant").checked,
           stock: Math.max(0, Math.round(Utils.lireNombre(UI.$("#prod-stock").value))),
-          couverture: photos.length ? await miniature(photos[0]) : "",
+          couverture,
           modifie_le: new Date().toISOString(),
         };
         let enregistre;
@@ -216,6 +225,11 @@ const VueProduits = (() => {
           // Ordre des photos garanti : on remplace tout le jeu.
           const anciennes = await Api.listerPar("photos_produits", "produit_id", produit.id);
           for (const ph of anciennes) await Api.supprimerLigne("photos_produits", ph.id);
+          /* Les fichiers que plus aucune ligne ne référence sont retirés
+             du bucket : sans cela, chaque modification en laisserait. */
+          await Stockage.retirer(
+            anciennes.map((ph) => ph.data_url).filter((v) => gardees.indexOf(v) < 0),
+            Stockage.VITRINE);
         } else {
           enregistre = await Api.inserer("produits", { atelier_id: Api.atelierId(), ...valeurs });
         }
@@ -223,7 +237,7 @@ const VueProduits = (() => {
           await Api.inserer("photos_produits", {
             atelier_id: Api.atelierId(),
             produit_id: enregistre.id,
-            data_url: photos[i],
+            data_url: gardees[i],
             position: i,
           });
         }
@@ -244,7 +258,14 @@ const VueProduits = (() => {
           bouton: "Retirer", danger: true,
         });
         if (!ok) return;
+        /* La cascade SQL efface les lignes, pas les fichiers : on relève
+           les chemins avant de supprimer, sinon ils resteraient orphelins
+           dans le bucket. */
+        const aRetirer = (await Api.listerPar("photos_produits", "produit_id", produit.id))
+          .map((ph) => ph.data_url)
+          .concat([produit.couverture]);
         await Api.supprimerLigne("produits", produit.id);
+        await Stockage.retirer(aRetirer, Stockage.VITRINE);
         UI.toast("Réalisation retirée", "ok");
         location.hash = "#/produits";
       };

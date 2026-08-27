@@ -185,6 +185,40 @@ const Api = (() => {
     return data.user;
   }
 
+  /* ---------- Fichiers (buckets de supabase/stockage.sql) ----------
+     Les règles d'accès sont posées côté serveur : elles comparent le
+     premier dossier du chemin à l'atelier de la session. Ici on ne fait
+     que transmettre. */
+
+  async function deposerFichier(bucket, chemin, blob, typeMime) {
+    const { error } = await client.storage.from(bucket).upload(chemin, blob, {
+      contentType: typeMime || (blob && blob.type) || "image/jpeg",
+      upsert: true,
+      cacheControl: "31536000",   /* une année : le chemin change à chaque version */
+    });
+    if (error) throw new Error(traduire(error));
+    return chemin;
+  }
+
+  function urlPublique(bucket, chemin) {
+    const { data } = client.storage.from(bucket).getPublicUrl(chemin);
+    return (data && data.publicUrl) || "";
+  }
+
+  /** Bucket privé : une URL valable un temps limité. */
+  async function urlSignee(bucket, chemin, secondes) {
+    const { data, error } = await client.storage.from(bucket)
+      .createSignedUrl(chemin, secondes || 3600);
+    if (error) throw new Error(traduire(error));
+    return (data && data.signedUrl) || "";
+  }
+
+  async function supprimerFichiers(bucket, chemins) {
+    if (!chemins || !chemins.length) return;
+    const { error } = await client.storage.from(bucket).remove(chemins);
+    if (error) throw new Error(traduire(error));
+  }
+
   /* ---------- Accès aux tables (le RLS borne chaque atelier) ---------- */
 
   function verifier({ data, error }) {
@@ -249,5 +283,6 @@ const Api = (() => {
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
     creerCompte, creerCompteAdmin, deconnexion,
     lister, listerTranche, listerPar, lireLigne, inserer, mettreAJour, supprimerLigne, rpc,
+    deposerFichier, urlPublique, urlSignee, supprimerFichiers,
   };
 })();

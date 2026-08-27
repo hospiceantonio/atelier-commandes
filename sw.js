@@ -3,7 +3,7 @@
    hors ligne une fois installée sur le téléphone.
    Incrémenter VERSION à chaque mise à jour des fichiers.
    ========================================================= */
-const VERSION = "atelier-v34";
+const VERSION = "atelier-v35";
 
 const FICHIERS = [
   "./",
@@ -14,6 +14,7 @@ const FICHIERS = [
   "./js/utils.js",
   "./js/pont-android.js",
   "./js/api.js",
+  "./js/stockage.js",
   "./js/mesures.js",
   "./js/store.js",
   "./js/ui.js",

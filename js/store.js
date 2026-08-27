@@ -104,8 +104,11 @@ const Store = (() => {
     paiements: l.paiements || [], livreLe: l.livre_le, creeLe: l.cree_le, modifieLe: l.modifie_le,
   };
 
+  /* `valeur` est ce que la base garde : une data-url héritée ou un chemin
+     dans le bucket privé. `src` est ce qu'on affiche — rempli par
+     photosDeCommande, qui signe les chemins avant de rendre la main. */
   const photoVersApp = (l) => l && {
-    id: l.id, commandeId: l.commande_id, dataUrl: l.data_url, creeLe: l.cree_le,
+    id: l.id, commandeId: l.commande_id, valeur: l.data_url, src: "", creeLe: l.cree_le,
   };
 
   const depenseVersApp = (l) => l && {
@@ -144,8 +147,21 @@ const Store = (() => {
     return clientVersApp(await Api.inserer("clients", objet));
   }
 
-  /** La base supprime en cascade les commandes et photos du client. */
-  const supprimerClient = (id) => Api.supprimerLigne("clients", id);
+  /**
+   * La base supprime en cascade les commandes et photos du client — mais
+   * la cascade ne connaît que des lignes. Les fichiers du bucket ne
+   * partent que si on les nomme, et après la suppression leurs chemins
+   * sont introuvables : on les relève donc avant.
+   */
+  async function supprimerClient(id) {
+    const commandes = await commandesDuClient(id);
+    const fichiers = [];
+    for (const commande of commandes) {
+      for (const photo of await lignesPhotos(commande.id)) fichiers.push(photo.valeur);
+    }
+    await Api.supprimerLigne("clients", id);
+    await Stockage.retirer(fichiers, Stockage.COMMANDES);
+  }
 
   function chercherClients(clients, terme) {
     const t = Utils.sansAccent(terme).trim();
@@ -252,7 +268,12 @@ const Store = (() => {
     }));
   }
 
-  const supprimerCommande = (id) => Api.supprimerLigne("commandes", id);
+  /** Même remarque que pour le client : les chemins d'abord, la ligne ensuite. */
+  async function supprimerCommande(id) {
+    const fichiers = (await lignesPhotos(id)).map((photo) => photo.valeur);
+    await Api.supprimerLigne("commandes", id);
+    await Stockage.retirer(fichiers, Stockage.COMMANDES);
+  }
 
   /* ---------- Calculs ---------- */
 
@@ -270,15 +291,31 @@ const Store = (() => {
 
   /* ---------- Photos ---------- */
 
-  const photosDeCommande = async (commandeId) =>
+  const lignesPhotos = async (commandeId) =>
     (await Api.listerPar("photos", "commande_id", commandeId, "cree_le", true)).map(photoVersApp);
 
-  const ajouterPhoto = async (commandeId, dataUrl) =>
+  /**
+   * Les photos de tissus vivent dans un bucket privé : leur URL est
+   * signée et expire. On les signe toutes ici, d'un coup, pour que la
+   * vue reste synchrone une fois la liste reçue.
+   */
+  async function photosDeCommande(commandeId) {
+    const photos = await lignesPhotos(commandeId);
+    const urls = await Stockage.srcPriveesEnLot(photos.map((p) => p.valeur));
+    photos.forEach((photo, i) => { photo.src = urls[i]; });
+    return photos;
+  }
+
+  /** `valeur` : le chemin renvoyé par le dépôt (ou une data-url héritée). */
+  const ajouterPhoto = async (commandeId, valeur) =>
     photoVersApp(await Api.inserer("photos", {
-      atelier_id: Api.atelierId(), commande_id: commandeId, data_url: dataUrl,
+      atelier_id: Api.atelierId(), commande_id: commandeId, data_url: valeur,
     }));
 
-  const supprimerPhoto = (id) => Api.supprimerLigne("photos", id);
+  async function supprimerPhoto(id, valeur) {
+    await Api.supprimerLigne("photos", id);
+    await Stockage.retirer([valeur], Stockage.COMMANDES);
+  }
 
   /* ---------- Dépenses ---------- */
 
@@ -385,7 +422,7 @@ const Store = (() => {
       "</style></head><body>" +
 
       "<div class='entete'>" +
-        (r.logo ? "<img class='logo' src='" + r.logo + "' alt=''>" : "") +
+        (r.logo ? "<img class='logo' src='" + Stockage.src(r.logo) + "' alt=''>" : "") +
         "<div class='atelier'><h1>" + e(r.nomAtelier) + "</h1>" +
           (r.slogan ? "<p>" + e(r.slogan) + "</p>" : "") +
           (contacts ? "<p>" + e(contacts) + "</p>" : "") +
@@ -470,7 +507,7 @@ const Store = (() => {
       "</style></head><body>" +
 
       "<div class='entete'>" +
-        (r.logo ? "<img class='logo' src='" + r.logo + "' alt=''>" : "") +
+        (r.logo ? "<img class='logo' src='" + Stockage.src(r.logo) + "' alt=''>" : "") +
         "<div class='atelier'><h1>" + e(r.nomAtelier) + "</h1>" +
           (r.slogan ? "<p>" + e(r.slogan) + "</p>" : "") +
           (contacts ? "<p>" + e(contacts) + "</p>" : "") + "</div>" +
@@ -568,7 +605,7 @@ const Store = (() => {
       "</style></head><body>" +
 
       "<div class='entete'>" +
-        (r.logo ? "<img class='logo' src='" + r.logo + "' alt=''>" : "") +
+        (r.logo ? "<img class='logo' src='" + Stockage.src(r.logo) + "' alt=''>" : "") +
         "<div class='atelier'><h1>" + e(r.nomAtelier) + "</h1>" +
           (r.slogan ? "<p>" + e(r.slogan) + "</p>" : "") +
           (contacts ? "<p>" + e(contacts) + "</p>" : "") + "</div>" +

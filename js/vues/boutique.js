@@ -69,7 +69,7 @@ const VueBoutique = (() => {
     return (
       '<a class="carte-produit' + (vedette ? " vedette" : "") + '" href="#/produit/' + p.id + '">' +
         (p.couverture
-          ? '<img class="produit-photo" src="' + p.couverture + '" alt="" ' +
+          ? '<img class="produit-photo" src="' + Stockage.src(p.couverture) + '" alt="" ' +
             'loading="lazy" decoding="async">'
           : '<span class="produit-photo produit-photo-vide">' + UI.icone("image") + "</span>") +
         '<span class="produit-infos">' +
@@ -114,7 +114,7 @@ const VueBoutique = (() => {
     return (
       '<a class="carte-avant" href="#/produit/' + p.id + '">' +
         (p.couverture
-          ? '<img src="' + p.couverture + '" alt="" loading="lazy">'
+          ? '<img src="' + Stockage.src(p.couverture) + '" alt="" loading="lazy">'
           : '<span class="produit-photo-vide">' + UI.icone("image") + "</span>") +
         '<span class="carte-avant-voile">' +
           '<span class="produit-nom">' + e(p.nom) + "</span>" +
@@ -132,7 +132,7 @@ const VueBoutique = (() => {
       '<' + (b.lien ? "button type=\"button\"" : "span") +
         ' class="carte-avant carte-banniere"' +
         (b.lien ? ' data-lien="' + e(b.lien) + '"' : "") + ">" +
-        '<img src="' + b.image + '" alt="' + e(b.titre) + '" loading="lazy">' +
+        '<img src="' + Stockage.src(b.image, Stockage.BANNIERES) + '" alt="' + e(b.titre) + '" loading="lazy">' +
         (b.titre
           ? '<span class="carte-avant-voile"><span class="produit-nom">' + e(b.titre) + "</span></span>"
           : "") +
@@ -358,8 +358,8 @@ const VueBoutique = (() => {
       Api.listerPar("photos_produits", "produit_id", id, "position", true),
       Api.lireLigne("ateliers_publics", p.atelier_id),
     ]);
-    const images = photos.length ? photos.map((ph) => ph.data_url)
-      : (p.couverture ? [p.couverture] : []);
+    const images = (photos.length ? photos.map((ph) => ph.data_url)
+      : (p.couverture ? [p.couverture] : [])).map((v) => Stockage.src(v));
 
     UI.entete({ titre: p.nom, sous: atelier ? atelier.nom : "", retour: true });
 
@@ -410,7 +410,7 @@ const VueBoutique = (() => {
       (atelier
         ? '<button type="button" class="carte" style="width:100%;text-align:left;margin-top:12px;display:flex;align-items:center;gap:12px;border:0;font:inherit;cursor:pointer" data-nav="#/atelier/' + atelier.id + '">' +
             (atelier.logo
-              ? '<img src="' + atelier.logo + '" alt="" class="logo-apercu">'
+              ? '<img src="' + Stockage.src(atelier.logo) + '" alt="" class="logo-apercu">'
               : '<span class="pastille">' + e((atelier.nom || "?")[0].toUpperCase()) + "</span>") +
             '<span style="flex:1;min-width:0">' +
               '<span class="ligne-titre">' + e(atelier.nom) + "</span>" +
@@ -453,7 +453,7 @@ const VueBoutique = (() => {
     const ligne = (a) =>
       '<button type="button" class="ligne" data-nav="#/atelier/' + a.id + '">' +
         (a.logo
-          ? '<span class="pastille"><img src="' + a.logo + '" alt=""></span>'
+          ? '<span class="pastille"><img src="' + Stockage.src(a.logo) + '" alt=""></span>'
           : '<span class="pastille">' + e((a.nom || "?")[0].toUpperCase()) + "</span>") +
         '<span class="ligne-corps">' +
           '<span class="ligne-titre">' + e(a.nom) + "</span>" +
@@ -494,7 +494,7 @@ const VueBoutique = (() => {
     vue.innerHTML =
       '<div class="carte" style="display:flex;align-items:center;gap:12px">' +
         (a.logo
-          ? '<img src="' + a.logo + '" alt="" class="logo-apercu">'
+          ? '<img src="' + Stockage.src(a.logo) + '" alt="" class="logo-apercu">'
           : '<span class="pastille">' + e((a.nom || "?")[0].toUpperCase()) + "</span>") +
         '<div style="flex:1;min-width:0">' +
           '<div class="ligne-titre">' + e(a.nom) + "</div>" +

@@ -258,6 +258,33 @@ const Utils = (() => {
     return { dataUrl: toile.toDataURL("image/jpeg", qualite), largeur: cl, hauteur: ch };
   }
 
+  /**
+   * Même compression, mais en Blob : c'est ce qu'attend le dépôt dans un
+   * bucket. Un Blob évite le détour par le base64, qui gonfle de 33 %
+   * ce qui transite.
+   */
+  async function compresserVersBlob(fichier, coteMax = 1100, qualite = 0.72) {
+    const source = await chargerImage(fichier);
+    const l = source.width, h = source.height;
+    const ratio = Math.min(1, coteMax / Math.max(l, h));
+    const cl = Math.max(1, Math.round(l * ratio));
+    const ch = Math.max(1, Math.round(h * ratio));
+
+    const toile = document.createElement("canvas");
+    toile.width = cl;
+    toile.height = ch;
+    const ctx = toile.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(source, 0, 0, cl, ch);
+    if (source.close) source.close();
+
+    const blob = await new Promise((resoudre, rejeter) => {
+      toile.toBlob((b) => (b ? resoudre(b) : rejeter(new Error("Compression impossible"))),
+        "image/jpeg", qualite);
+    });
+    return { blob, largeur: cl, hauteur: ch };
+  }
+
   function chargerImage(fichier) {
     // createImageBitmap redresse la photo selon l'orientation EXIF du téléphone.
     if (typeof createImageBitmap === "function") {
@@ -293,6 +320,6 @@ const Utils = (() => {
     fmtDateHeure, fmtHeure, ecartJours, delai, MOIS, MOIS_COURT,
     normaliserTel, lienWhatsApp, lienTel, fmtTel, telAppel, telWhatsApp, imprimerA4,
     initiales, nomComplet, sansAccent, tempo, remplirModele, telecharger,
-    compresserImage, tailleLisible,
+    compresserImage, compresserVersBlob, tailleLisible,
   };
 })();
