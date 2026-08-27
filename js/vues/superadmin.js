@@ -1241,8 +1241,15 @@ const VueSuperAdmin = (() => {
               "<code>{{ .Token }}</code> au modèle d'email « Magic Link ». " +
               "Puis lancer le test ci-dessous.</span></div>" +
             '<button type="button" class="btn btn-clair btn-bloc" id="sa-2fa-test">' +
-              UI.icone("check", "ic-sm") + "Tester la compatibilité</button>" +
+              UI.icone("check", "ic-sm") + "1. Tester la compatibilité</button>" +
             '<div id="sa-2fa-resultat" style="margin-top:10px"></div>' +
+            '<button type="button" class="btn btn-clair btn-bloc" id="sa-2fa-email" style="margin-top:10px">' +
+              UI.icone("connexion", "ic-sm") + "2. Recevoir un code de test</button>" +
+            '<div class="aide" style="margin-top:6px">Envoie un code à ' +
+              e(profil.email || "votre adresse") + ". Vérifiez qu'il arrive <strong>et " +
+              "qu'il contient bien 6 chiffres</strong> : c'est ce qui manque le plus " +
+              "souvent quand <code>{{ .Token }}</code> n'a pas été ajouté au modèle " +
+              "d'email. Le code reçu ici ne sert qu'à ce contrôle.</div>" +
             '<label class="interrupteur" style="display:flex;margin-top:12px">' +
               '<input type="checkbox" id="sa-2fa"' + (prm.double_facteur ? " checked" : "") + ">" +
               "<span>Exiger le code par email à chaque connexion</span>" +
@@ -1359,6 +1366,22 @@ const VueSuperAdmin = (() => {
     }
 
     if (boutonTest) boutonTest.onclick = tester;
+
+    /* Le test ci-dessus prouve que le verrou serveur fonctionnera ; il ne
+       dit rien de l'acheminement des emails. Ce bouton-là s'en charge. */
+    const boutonEmail = UI.$("#sa-2fa-email");
+    if (boutonEmail) {
+      boutonEmail.onclick = async () => {
+        boutonEmail.disabled = true;
+        try {
+          await Api.renvoyerCode(profil.email);
+          UI.toast("Code envoyé à " + profil.email, "ok");
+        } catch (err) {
+          UI.toast(err.message || "Envoi impossible", "erreur");
+        }
+        boutonEmail.disabled = false;
+      };
+    }
 
     const interrupteur2fa = UI.$("#sa-2fa");
     if (interrupteur2fa) {

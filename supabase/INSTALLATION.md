@@ -111,8 +111,12 @@ si l'application est court-circuitée.
 1. **Tester la compatibilité.** Le verrou serveur repose sur la méthode
    d'authentification inscrite dans le jeton. Le test le vérifie sur
    votre projet ; l'interrupteur reste refusé tant qu'il n'est pas passé.
-2. Basculer l'interrupteur et confirmer.
-3. Vous êtes déconnecté aussitôt : votre session n'avait qu'un facteur.
+2. **Recevoir un code de test.** Un code part vers votre propre adresse.
+   Vérifiez qu'il arrive *et* qu'il contient bien 6 chiffres. C'est le
+   contrôle du SMTP et du `{{ .Token }}` — le test de l'étape 1 ne dit
+   rien de l'acheminement des emails.
+3. Basculer l'interrupteur et confirmer.
+4. Vous êtes déconnecté aussitôt : votre session n'avait qu'un facteur.
    Reconnectez-vous avec le code reçu par email.
 
 Faites l'essai sur **votre** compte avant de l'imposer aux ateliers.
