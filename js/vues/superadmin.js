@@ -1232,7 +1232,7 @@ const VueSuperAdmin = (() => {
             '<div class="carte-titre">' + UI.icone("connexion", "ic-sm") + "Double facteur à la connexion</div>" +
             '<p style="margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--encre-douce)">' +
               "Une fois activé, chaque connexion — superadministrateur, administrateur " +
-              "ou modérateur — demande le mot de passe <em>puis</em> un code à 6 chiffres " +
+              "ou modérateur — demande le mot de passe <em>puis</em> un code " +
               "envoyé par email. Le serveur exige les deux : le mot de passe seul ne " +
               "donne plus accès à rien.</p>" +
             '<div class="alerte" style="margin-bottom:12px">' + UI.icone("alerte", "ic-sm") +
@@ -1247,7 +1247,7 @@ const VueSuperAdmin = (() => {
               UI.icone("connexion", "ic-sm") + "2. Recevoir un code de test</button>" +
             '<div class="aide" style="margin-top:6px">Envoie un code à ' +
               e(profil.email || "votre adresse") + ". Vérifiez qu'il arrive <strong>et " +
-              "qu'il contient bien 6 chiffres</strong> : c'est ce qui manque le plus " +
+              "qu'il contient bien le code</strong> : c'est ce qui manque le plus " +
               "souvent quand <code>{{ .Token }}</code> n'a pas été ajouté au modèle " +
               "d'email. Le code reçu ici ne sert qu'à ce contrôle.</div>" +
             '<label class="interrupteur" style="display:flex;margin-top:12px">' +

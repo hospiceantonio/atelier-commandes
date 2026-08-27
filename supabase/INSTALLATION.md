@@ -79,8 +79,8 @@ l'abonnement automatiquement à la confirmation du paiement.
 ## Double facteur : code envoyé par email
 
 Une fois activé, toute connexion — superadministrateur, administrateur
-d'atelier ou modérateur — demande le mot de passe **puis** un code à
-6 chiffres reçu par email.
+d'atelier ou modérateur — demande le mot de passe **puis** un code reçu
+par email.
 
 Les deux facteurs sont vérifiés par le serveur, pas seulement à l'écran :
 une session qui n'a passé qu'un seul des deux ne lit aucune donnée, même
@@ -112,7 +112,7 @@ si l'application est court-circuitée.
    d'authentification inscrite dans le jeton. Le test le vérifie sur
    votre projet ; l'interrupteur reste refusé tant qu'il n'est pas passé.
 2. **Recevoir un code de test.** Un code part vers votre propre adresse.
-   Vérifiez qu'il arrive *et* qu'il contient bien 6 chiffres. C'est le
+   Vérifiez qu'il arrive *et* qu'il contient bien le code. C'est le
    contrôle du SMTP et du `{{ .Token }}` — le test de l'étape 1 ne dit
    rien de l'acheminement des emails.
 3. Basculer l'interrupteur et confirmer.
@@ -141,3 +141,32 @@ si plus personne ne peut se connecter.
 Le mot de passe seul ne donne rien ; l'accès à la boîte mail seul non
 plus. Les deux conditions sont contrôlées dans `role_courant()` et
 `atelier_courant()`, par lesquelles passent toutes les règles d'accès.
+
+### Longueur du code
+
+Réglable dans *Authentication → Emails → Email OTP Length*. **Supabase
+n'accepte qu'une valeur entre 6 et 10** ; selon la date de création du
+projet, il est provisionné à 6 ou à 8. Moins de 6 chiffres n'est pas
+proposé — et resterait fragile : 4 chiffres ne font que 10 000
+combinaisons.
+
+L'application ne fige aucune longueur : le champ de saisie accepte
+jusqu'à 10 chiffres, quel que soit votre réglage.
+
+### Si les codes partent en indésirables
+
+C'est un problème de réputation du domaine expéditeur, pas de
+l'application. Dans la console de votre fournisseur SMTP :
+
+1. **SPF** — publier l'enregistrement TXT qu'il indique sur votre domaine.
+2. **DKIM** — activer la signature et publier la clé fournie.
+3. **DMARC** — ajouter `v=DMARC1; p=none; rua=mailto:vous@votredomaine`.
+4. Expédier depuis une adresse de **votre** domaine (`connexion@…`), pas
+   depuis une adresse Gmail ou Yahoo.
+
+Tant que les trois premiers points ne sont pas en place, les messages
+automatiques finissent régulièrement en indésirables. Un test sur
+https://www.mail-tester.com donne une note et la liste de ce qui manque.
+
+En attendant, l'écran de saisie du code rappelle déjà de regarder dans
+les indésirables, et le bouton **Renvoyer un code** permet de réessayer.

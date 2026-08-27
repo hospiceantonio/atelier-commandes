@@ -84,7 +84,7 @@ const VueConnexion = (() => {
     window.AppNaviguer();
   }
 
-  /* Second écran : le code à 6 chiffres reçu par email. Le mot de passe
+  /* Second écran : le code reçu par email. Le mot de passe
      est déjà validé côté serveur, mais la session ne donne encore accès
      à rien tant que ce code n'est pas confirmé. */
   function demanderCode(email) {
@@ -97,12 +97,12 @@ const VueConnexion = (() => {
       '<div class="voile-boite">' +
         '<img src="icons/icon-192.png" alt="" class="voile-logo">' +
         "<h1>Vérification</h1>" +
-        '<p class="voile-texte">Un code à 6 chiffres vient d\'être envoyé à<br>' +
+        '<p class="voile-texte">Un code de connexion vient d\'être envoyé à<br>' +
           "<strong>" + Utils.echapper(email) + "</strong></p>" +
         '<form id="form-code" style="text-align:left;margin-top:18px">' +
           '<div class="champ"><label for="cx-code">Code reçu par email</label>' +
             '<input id="cx-code" inputmode="numeric" autocomplete="one-time-code" ' +
-              'pattern="[0-9]*" maxlength="6" required ' +
+              'pattern="[0-9]*" maxlength="10" required ' +
               'style="letter-spacing:6px;text-align:center;font-size:22px;font-weight:700"></div>' +
           '<button type="submit" class="btn btn-bloc" id="cx-valider">Valider le code</button>' +
         "</form>" +

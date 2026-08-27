@@ -112,7 +112,8 @@ const Api = (() => {
     return { termine: false, email };
   }
 
-  /** Second facteur : le code à 6 chiffres reçu par email. */
+  /** Second facteur : le code reçu par email (6 à 10 chiffres selon
+      le réglage « Email OTP Length » du projet Supabase). */
   async function verifierCode(email, code) {
     const { data, error } = await client.auth.verifyOtp({
       email,
