@@ -59,6 +59,7 @@
     { motif: /^\/commande\/nouvelle$/, vue: (v, m, p) => VueCommandes.nouvelle(v, p), module: "atelier", droit: "commande_creer" },
     { motif: /^\/commande\/([^/]+)$/, vue: (v, m) => VueCommandes.detail(v, m[1]), module: "atelier" },
     { motif: /^\/statistiques$/, vue: (v) => VueStats.afficher(v), onglet: "/statistiques", droit: "recettes_voir" },
+    { motif: /^\/compte$/, vue: (v) => VueReglages.compte(v) },
     { motif: /^\/nouveau$/, vue: () => { location.hash = "#/"; menuNouveau(); } },
     { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v), onglet: "/ventes", module: "vitrine" },
     { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v), module: "vitrine", droit: "vente_creer" },

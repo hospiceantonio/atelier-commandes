@@ -329,6 +329,65 @@ const VueReglages = (() => {
     };
   }
 
+  /* ---------- Mon compte (modérateur) ----------
+     Les réglages de l'atelier ne lui sont pas ouverts, et c'est là que
+     vit le bouton de déconnexion : il n'avait donc aucun moyen de
+     quitter sa session. Cet écran lui donne le sien, et lui montre au
+     passage ce qu'il a le droit de faire — la réponse à « pourquoi ce
+     bouton n'est-il pas là ? ». */
+
+  async function compte(vue) {
+    const r = Store.lireReglages();
+    const profil = Api.lireProfil();
+    const droits = Api.lireDroits(profil);
+    const accordes = Api.DROITS.filter((d) => droits[d.cle]);
+
+    UI.entete({ titre: "Mon compte", sous: r.nomAtelier, retour: true });
+
+    vue.innerHTML =
+      '<div class="carte">' +
+        '<div class="carte-titre">' + UI.icone("connexion", "ic-sm") + "Vous</div>" +
+        '<div class="paires">' +
+          '<div class="paire"><span class="l">Nom</span><span class="v">' +
+            e(profil ? (profil.nom_complet || "—") : "—") + "</span></div>" +
+          '<div class="paire"><span class="l">Email</span><span class="v">' +
+            e(profil ? profil.email : "—") + "</span></div>" +
+          (profil && profil.telephone
+            ? '<div class="paire"><span class="l">Téléphone</span><span class="v">' +
+                e(Utils.fmtTel(profil.telephone)) + "</span></div>"
+            : "") +
+          '<div class="paire"><span class="l">Atelier</span><span class="v">' +
+            e(r.nomAtelier) + "</span></div>" +
+        "</div>" +
+      "</div>" +
+
+      '<div class="carte">' +
+        '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Ce que vous pouvez faire</div>" +
+        (accordes.length
+          ? '<div class="mini-liste">' +
+              accordes.map((d) =>
+                '<div class="mini"><span class="l">' + e(d.libelle) + "</span>" +
+                  '<span class="v vert">' + UI.icone("check", "ic-sm") + "</span></div>"
+              ).join("") +
+            "</div>"
+          : '<p style="margin:0;font-size:13px;color:var(--encre-tres-douce)">' +
+              "Aucun droit ne vous est encore accordé.</p>") +
+        '<div class="aide" style="margin-top:8px">Ces droits sont réglés par ' +
+          "l'administrateur de l'atelier.</div>" +
+      "</div>" +
+
+      '<div class="carte">' +
+        '<button type="button" class="btn btn-danger btn-bloc" id="compte-deconnexion">' +
+          "Se déconnecter</button>" +
+      "</div>";
+
+    UI.$("#compte-deconnexion").onclick = async () => {
+      await Api.deconnexion();
+      location.hash = "#/";
+      window.AppNaviguer();
+    };
+  }
+
   /* ---------- Droits d'un modérateur ----------
      Ce que l'administrateur coche ici, le serveur l'applique (a_droit,
      dans supabase/droits.sql). Décocher une case ne fait donc pas que
@@ -389,5 +448,5 @@ const VueReglages = (() => {
     };
   }
 
-  return { afficher };
+  return { afficher, compte };
 })();

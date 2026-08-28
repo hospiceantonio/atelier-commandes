@@ -29,19 +29,27 @@ const VueAccueil = (() => {
     UI.entete({
       titre: r.nomAtelier,
       sous: r.slogan || Utils.fmtJourDate(aujourdhui),
-      actions:
-        (Api.estAdmin()
-          ? '<a class="btn-ic" href="#/reglages" aria-label="Réglages">' + UI.icone("reglages") + "</a>"
-          : ""),
+      actions: Api.estAdmin()
+        ? '<a class="btn-ic" href="#/reglages" aria-label="Réglages">' + UI.icone("reglages") + "</a>"
+        : '<a class="btn-ic" href="#/compte" aria-label="Mon compte">' + UI.icone("connexion") + "</a>",
     });
 
     let html =
       Store.bandeauAbonnement() +
+      /* Le total du mois est une recette : sans le droit de les consulter,
+         il n'a pas à s'afficher ici non plus. Le compte à rebours des
+         livraisons prend alors la tête — c'est ce qui sert au quotidien. */
       '<section class="heros">' +
-        '<div class="heros-label">Recettes de ' + e(Utils.MOIS[new Date().getMonth()]) + "</div>" +
-        '<div class="heros-valeur">' + Utils.fmtMontant(stats.recettes, r.devise) + "</div>" +
+        (Api.aDroit("recettes_voir")
+          ? '<div class="heros-label">Recettes de ' + e(Utils.MOIS[new Date().getMonth()]) + "</div>" +
+            '<div class="heros-valeur">' + Utils.fmtMontant(stats.recettes, r.devise) + "</div>"
+          : '<div class="heros-label">Commandes en cours</div>' +
+            '<div class="heros-valeur">' + ouvertes.length + "</div>") +
         '<div class="heros-pied">' +
-          '<div><div class="v">' + ouvertes.length + '</div><div class="l">commande' + (ouvertes.length > 1 ? "s" : "") + " en cours</div></div>" +
+          (Api.aDroit("recettes_voir")
+            ? '<div><div class="v">' + ouvertes.length + '</div><div class="l">commande' +
+                (ouvertes.length > 1 ? "s" : "") + " en cours</div></div>"
+            : '<div><div class="v">' + enRetard.length + '</div><div class="l">en retard</div></div>') +
           '<div><div class="v">' + Utils.fmtMontant(soldesOuverts, r.devise) + '</div><div class="l">à encaisser</div></div>' +
         "</div>" +
       "</section>";
