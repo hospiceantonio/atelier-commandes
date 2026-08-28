@@ -112,7 +112,13 @@ with attendu(rang, quoi, present, fichier) as (
         to_regprocedure('public.rattacher_moderateur_par_email(text)') is not null,
         'equipe.sql'),
     (14, 'Rattachement d''un administrateur',
-        to_regprocedure('public.rattacher_admin(uuid,uuid)') is not null, 'equipe.sql')
+        to_regprocedure('public.rattacher_admin(uuid,uuid)') is not null, 'equipe.sql'),
+    (15, 'Fiche mode des réalisations',
+        (select count(*) from information_schema.columns
+          where table_schema = 'public' and table_name = 'produits'
+            and column_name in ('sexe', 'tranche_age', 'tailles', 'couleurs',
+                                'tissu', 'sur_mesure', 'tendance')) = 7,
+        'mode.sql')
 )
 select quoi as "Ce qui est attendu",
        case when present then 'OK' else 'MANQUE' end as "État",

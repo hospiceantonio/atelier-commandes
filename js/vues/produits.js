@@ -51,7 +51,14 @@ const VueProduits = (() => {
               '<span class="ligne-corps">' +
                 '<span class="ligne-titre">' + (p.en_avant ? "★ " : "") + e(p.nom) + "</span>" +
                 '<span class="ligne-sous">' + (p.code ? e(p.code) : "Sans code") +
-                  (p.en_avant ? " · À la une" : "") + "</span>" +
+                  (p.en_avant ? " · À la une" : "") +
+                  (p.tendance ? " · Tendance" : "") +
+                  (p.sur_mesure ? " · Sur mesure" : "") + "</span>" +
+                /* Ce qu'un client demande avant tout : pour qui, quelle
+                   taille. Rien ne s'affiche si rien n'a été renseigné. */
+                (Mode.resume(p)
+                  ? '<span class="ligne-sous">' + e(Mode.resume(p)) + "</span>"
+                  : "") +
               "</span>" +
               '<span class="ligne-fin">' +
                 (p.stock > 0
@@ -132,6 +139,50 @@ const VueProduits = (() => {
               "retire automatiquement les articles vendus.</div></div>" +
         "</div>" +
 
+        /* ---------- Mode ----------
+           Sexe et tranche d'âge d'abord : ce sont eux qui commandent la
+           grille de tailles juste en dessous. */
+        '<div class="carte">' +
+          '<div class="carte-titre">' + UI.icone("etiquette", "ic-sm") + "Mode</div>" +
+          '<div class="champ-duo">' +
+            '<div class="champ"><label for="prod-sexe">Pour qui</label>' +
+              '<select id="prod-sexe">' +
+                Mode.SEXES.map((s) => '<option value="' + e(s.code) + '"' +
+                  (produit && produit.sexe === s.code ? " selected" : "") + ">" + e(s.nom) + "</option>").join("") +
+              "</select></div>" +
+            '<div class="champ"><label for="prod-age">Tranche d\'âge</label>' +
+              '<select id="prod-age">' +
+                Mode.AGES.map((a) => '<option value="' + e(a.code) + '"' +
+                  (produit && produit.tranche_age === a.code ? " selected" : "") + ">" + e(a.nom) + "</option>").join("") +
+              "</select></div>" +
+          "</div>" +
+
+          '<div class="champ"><label>Tailles disponibles</label>' +
+            '<div id="prod-tailles"></div>' +
+            '<div class="aide">Norme européenne. La grille suit le sexe et l\'âge choisis ; ' +
+              "pour les enfants, l'âge est suivi de la stature en centimètres.</div></div>" +
+
+          '<div class="champ"><label>Couleurs</label>' +
+            '<div class="puces puces-grille" id="prod-couleurs"></div></div>' +
+
+          '<div class="champ"><label for="prod-tissu">Type de tissu</label>' +
+            '<input id="prod-tissu" autocomplete="off" list="prod-tissus" placeholder="ex. Wax (pagne)" value="' +
+              e(produit ? (produit.tissu || "") : "") + '">' +
+            '<datalist id="prod-tissus">' +
+              Mode.TISSUS.map((t) => '<option value="' + e(t) + '">').join("") +
+            "</datalist>" +
+            '<div class="aide">Choisissez dans la liste ou écrivez le vôtre.</div></div>' +
+
+          '<label class="interrupteur" style="display:flex">' +
+            '<input type="checkbox" id="prod-sur-mesure"' + (produit && produit.sur_mesure ? " checked" : "") + ">" +
+            "<span><strong>Sur mesure</strong> — le modèle est confectionné aux mesures du client</span>" +
+          "</label>" +
+          '<label class="interrupteur" style="display:flex">' +
+            '<input type="checkbox" id="prod-tendance"' + (produit && produit.tendance ? " checked" : "") + ">" +
+            "<span><strong>Tendance</strong> — un badge le signale dans la boutique</span>" +
+          "</label>" +
+        "</div>" +
+
         '<button type="submit" class="btn btn-bloc" id="prod-enregistrer">' +
           UI.icone("check", "ic-sm") + (produit ? "Enregistrer les modifications" : "Publier la réalisation") + "</button>" +
       "</form>" +
@@ -180,6 +231,69 @@ const VueProduits = (() => {
       afficherPhotos();
     });
 
+    /* ---------- Tailles et couleurs ----------
+       Deux listes qu'on coche. Les tailles proposées dépendent du sexe et
+       de l'âge : changer l'un des deux redessine la grille. */
+    let tailles = (produit && produit.tailles) ? produit.tailles.slice() : [];
+    let couleurs = (produit && produit.couleurs) ? produit.couleurs.slice() : [];
+
+    const puce = (valeur, choisi, attribut, dedans) =>
+      '<button type="button" class="puce' + (choisi ? " actif" : "") + '" ' +
+        attribut + '="' + e(valeur) + '" aria-pressed="' + (choisi ? "true" : "false") + '">' +
+        dedans + "</button>";
+
+    function rendreTailles() {
+      const groupes = Mode.grilles(UI.$("#prod-sexe").value, UI.$("#prod-age").value);
+      /* Changer de grille ne doit pas effacer en douce ce qui était déjà
+         coché : ce qui n'entre dans aucun groupe reste montré à part. */
+      const connues = new Set();
+      for (const g of groupes) for (const t of g.tailles) connues.add(t);
+      const gardees = tailles.filter((t) => !connues.has(t));
+      if (gardees.length) groupes.push({ titre: "Autres tailles retenues", tailles: gardees });
+
+      UI.$("#prod-tailles").innerHTML = groupes.length
+        ? groupes.map((g) =>
+            '<div class="sous-titre-champ">' + e(g.titre) + "</div>" +
+            '<div class="puces puces-grille">' +
+              g.tailles.map((t) => puce(t, tailles.indexOf(t) >= 0, "data-taille", e(t))).join("") +
+            "</div>").join("")
+        : '<div class="aide">Choisissez la tranche d\'âge : la grille des tailles s\'y adapte.</div>';
+    }
+
+    function rendreCouleurs() {
+      const connues = Mode.COULEURS.map((c) => c.nom);
+      const toutes = connues.concat(couleurs.filter((c) => connues.indexOf(c) < 0));
+      UI.$("#prod-couleurs").innerHTML = toutes.map((nom) => {
+        const ton = Mode.tonDe(nom);
+        const pastille = '<span class="pastille-ton' + (ton ? "" : " multi") + '"' +
+          (ton ? ' style="background:' + e(ton) + '"' : "") + "></span>";
+        return puce(nom, couleurs.indexOf(nom) >= 0, "data-couleur",
+          pastille + "<span>" + e(nom) + "</span>");
+      }).join("");
+    }
+
+    function basculer(liste, valeur) {
+      const i = liste.indexOf(valeur);
+      if (i >= 0) liste.splice(i, 1); else liste.push(valeur);
+    }
+
+    rendreTailles();
+    rendreCouleurs();
+    UI.$("#prod-sexe").addEventListener("change", rendreTailles);
+    UI.$("#prod-age").addEventListener("change", rendreTailles);
+    UI.$("#prod-tailles").addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-taille]");
+      if (!b) return;
+      basculer(tailles, b.dataset.taille);
+      rendreTailles();
+    });
+    UI.$("#prod-couleurs").addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-couleur]");
+      if (!b) return;
+      basculer(couleurs, b.dataset.couleur);
+      rendreCouleurs();
+    });
+
     /* Enregistrement */
     UI.$("#form-produit").addEventListener("submit", async (ev) => {
       ev.preventDefault();
@@ -226,6 +340,13 @@ const VueProduits = (() => {
           prix,
           prix_visible: UI.$("#prod-prix-visible").checked,
           en_avant: UI.$("#prod-avant").checked,
+          sexe: UI.$("#prod-sexe").value,
+          tranche_age: UI.$("#prod-age").value,
+          tailles: tailles.slice(),
+          couleurs: couleurs.slice(),
+          tissu: UI.$("#prod-tissu").value.trim(),
+          sur_mesure: UI.$("#prod-sur-mesure").checked,
+          tendance: UI.$("#prod-tendance").checked,
           couverture,
           modifie_le: new Date().toISOString(),
         };

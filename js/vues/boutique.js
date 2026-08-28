@@ -75,6 +75,14 @@ const VueBoutique = (() => {
         '<span class="produit-infos">' +
           '<span class="produit-nom">' + e(p.nom) + "</span>" +
           (atelier ? '<span class="produit-atelier">' + e(atelier.nom) + "</span>" : "") +
+          /* Deux repères qui font choisir : ce qui est de saison, et ce
+             qui se taille à la demande. */
+          (p.tendance || p.sur_mesure
+            ? '<span class="produit-atelier">' +
+                (p.tendance ? '<span class="badge badge-ok">Tendance</span>' : "") +
+                (p.sur_mesure ? '<span class="badge badge-neutre">Sur mesure</span>' : "") +
+              "</span>"
+            : "") +
           (p.prix_visible
             ? '<span class="produit-prix">' + fmtPrix(p, atelier) + "</span>"
             : '<span class="produit-prix-demande">Prix sur demande</span>') +
@@ -392,6 +400,36 @@ const VueBoutique = (() => {
           '<div class="paire"><span class="l">Réalisation</span><span class="v">' + e(p.nom) + "</span></div>" +
           (p.code ? '<div class="paire"><span class="l">Code</span><span class="v">' + e(p.code) + "</span></div>" : "") +
           '<div class="paire"><span class="l">Catégorie</span><span class="v">' + e(p.categorie || "Autres") + "</span></div>" +
+          /* La fiche mode : chaque ligne n'apparaît que si elle a
+             quelque chose à dire. Une suite de « non précisé » n'aide
+             personne à choisir. */
+          (p.sexe || p.tranche_age
+            ? '<div class="paire"><span class="l">Pour</span><span class="v">' +
+                e([p.sexe ? Mode.etiquetteSexe(p.sexe) : "",
+                   p.tranche_age ? Mode.etiquetteAge(p.tranche_age) : ""]
+                  .filter(Boolean).join(" · ")) + "</span></div>"
+            : "") +
+          (p.tailles && p.tailles.length
+            ? '<div class="paire"><span class="l">Tailles</span><span class="v">' +
+                e(p.tailles.join(", ")) + "</span></div>"
+            : "") +
+          (p.couleurs && p.couleurs.length
+            ? '<div class="paire"><span class="l">Couleurs</span><span class="v liste">' +
+                p.couleurs.map((c) => {
+                  const ton = Mode.tonDe(c);
+                  return '<span class="badge badge-neutre">' +
+                    '<span class="pastille-ton' + (ton ? "" : " multi") + '"' +
+                      (ton ? ' style="background:' + e(ton) + '"' : "") + "></span>" +
+                    e(c) + "</span>";
+                }).join(" ") + "</span></div>"
+            : "") +
+          (p.tissu
+            ? '<div class="paire"><span class="l">Tissu</span><span class="v">' + e(p.tissu) + "</span></div>"
+            : "") +
+          (p.sur_mesure
+            ? '<div class="paire"><span class="l">Confection</span><span class="v">' +
+                "Sur mesure — taillé à vos mesures</span></div>"
+            : "") +
           '<div class="paire"><span class="l">Prix</span><span class="v gros">' +
             (p.prix_visible ? fmtPrix(p, atelier) : "Sur demande") + "</span></div>" +
         "</div>" +
