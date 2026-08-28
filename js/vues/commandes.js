@@ -287,9 +287,11 @@ const VueCommandes = (() => {
       prise.value = "";
       for (const fichier of fichiers) {
         try {
-          /* Un aperçu tout de suite, le fichier gardé pour l'envoi. */
-          const { dataUrl } = await Utils.compresserImage(fichier);
-          photos.push({ apercu: dataUrl, fichier });
+          /* Un aperçu tout de suite, et le Blob gardé pour l'envoi : une
+             seule lecture du fichier, qui n'est plus lisible ensuite sur
+             Android (voir Utils.preparerImage). */
+          const { dataUrl, blob } = await Utils.preparerImage(fichier);
+          photos.push({ apercu: dataUrl, blob });
         } catch (_) {
           UI.toast("Photo illisible, réessayez", "erreur");
         }
@@ -360,7 +362,7 @@ const VueCommandes = (() => {
           try {
             for (const ph of photos) {
               const chemin = await Stockage.deposerImage(
-                ph.fichier, Stockage.COMMANDES, commande.id);
+                ph.blob, Stockage.COMMANDES, commande.id, { dejaPrete: true });
               await Store.ajouterPhoto(commande.id, chemin);
             }
           } catch (_) {

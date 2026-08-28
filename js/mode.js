@@ -1,5 +1,5 @@
 /* =========================================================
-   Mode — le vocabulaire d'une réalisation : à qui elle
+   Mode — le vocabulaire d'un produit : à qui il
    s'adresse, en quelles tailles, en quelles couleurs, dans
    quel tissu.
 
@@ -134,8 +134,8 @@ const Mode = (() => {
   const etiquetteSexe = (code) => (SEXES.find((s) => s.code === code) || SEXES[0]).nom;
   const etiquetteAge = (code) => (AGES.find((a) => a.code === code) || AGES[0]).nom;
 
-  /** Une ligne lisible : « Femme · Adulte · 38, 40, 42 ». Vide si la
-      réalisation ne dit rien de tout cela — mieux vaut rien qu'un
+  /** Une ligne lisible : « Femme · Adulte · 38, 40, 42 ». Vide si le
+      produit ne dit rien de tout cela — mieux vaut rien qu'un
       chapelet de « non précisé ». */
   function resume(p) {
     const bouts = [];

@@ -1,9 +1,9 @@
 /* =========================================================
    Vue Boutique — vitrine publique, accessible sans compte.
-   - accueil : réalisations de tous les ateliers actifs
+   - accueil : produits de tous les ateliers actifs
    - produit : fiche avec photos en slider + « Commander »
    - ateliers : liste des ateliers avec recherche
-   - atelier  : réalisations d'un atelier, par catégorie
+   - atelier  : produits d'un atelier, par catégorie
    Seuls les ateliers à jour d'abonnement apparaissent (règle
    garantie côté serveur : RLS + vue ateliers_publics).
    ========================================================= */
@@ -115,7 +115,7 @@ const VueBoutique = (() => {
     return { produits: produits.filter((p) => parId[p.atelier_id]), ateliers, parId };
   }
 
-  /* ---------- Accueil public : toutes les réalisations ---------- */
+  /* ---------- Accueil public : tous les produits ---------- */
 
   /** Grande carte du carrousel « À la une ». */
   function carteAvant(p, atelier) {
@@ -150,7 +150,7 @@ const VueBoutique = (() => {
 
   /* ---------- Accueil : carrousel, galerie infinie, invitations ----------
 
-     Le catalogue n'est plus rapatrié d'un bloc : les réalisations
+     Le catalogue n'est plus rapatrié d'un bloc : les produits
      arrivent par lots à mesure que le visiteur descend, et leurs photos
      ne sont décodées qu'à l'approche. Avec des centaines de modèles et
      des photos en base64, tout charger d'un coup coûtait cher pour un
@@ -195,7 +195,7 @@ const VueBoutique = (() => {
       '<section class="cloture">' +
         '<span class="invite-chapeau">Vous êtes une maison de mode</span>' +
         "<h2>Vos modèles méritent mieux qu'un fil WhatsApp</h2>" +
-        "<p>Publiez vos réalisations, recevez les commandes, suivez vos mesures " +
+        "<p>Publiez vos produits, recevez les commandes, suivez vos mesures " +
           "et vos recettes. Vos clients vous trouvent ici ; vous gardez la main " +
           "sur tout le reste.</p>" +
         '<div class="chiffres">' +
@@ -262,7 +262,7 @@ const VueBoutique = (() => {
       bannieres = (await Api.lister("bannieres", "position", true)).filter((b) => b.active);
     } catch (_) { /* base pas encore à jour : pas de bannière */ }
 
-    UI.entete({ titre: "Atelier", sous: "Les réalisations de nos ateliers de couture" });
+    UI.entete({ titre: "Atelier", sous: "Les produits de nos ateliers de couture" });
 
     const criteres = {};
     const visibles = (liste) => liste.filter((p) => parId[p.atelier_id]);
@@ -329,7 +329,7 @@ const VueBoutique = (() => {
               "Élargissez la recherche : retirez un filtre ci-dessus.",
               '<button type="button" class="btn btn-clair" id="vider-filtres">' +
                 "Effacer les filtres</button>")
-          : UI.vide("image", "Aucune réalisation publiée",
+          : UI.vide("image", "Aucun produit publié",
               "Les maisons ajouteront bientôt leurs créations — revenez vite !");
         const vider = UI.$("#vider-filtres");
         if (vider) vider.onclick = () => { effacerTout(); };
@@ -339,7 +339,7 @@ const VueBoutique = (() => {
 
       zoneGalerie.innerHTML =
         '<div class="titre-categorie">' +
-          (filtre ? "Résultats" : "Toutes les réalisations") + "</div>" +
+          (filtre ? "Résultats" : "Tous les produits") + "</div>" +
         '<div class="grille-produits" id="galerie"></div>' +
         '<div id="sentinelle" style="height:1px"></div>' +
         '<div class="galerie-attente" id="attente" hidden>' +
@@ -512,7 +512,7 @@ const VueBoutique = (() => {
       }
     }
 
-    const corps = UI.ouvrirFeuille("Filtrer les réalisations",
+    const corps = UI.ouvrirFeuille("Filtrer les produits",
       '<div class="carte">' +
         groupe("Trier par", "tri", TRIS.map((t) => ({ code: t.cle, nom: t.nom }))) +
         groupe("Catégorie", "categorie", vocabulaire.categories || []) +
@@ -589,7 +589,7 @@ const VueBoutique = (() => {
     let message = "";
     if (atelier) {
       message = "Bonjour " + atelier.nom + " 👋\n" +
-        "Je suis intéressé(e) par votre réalisation « " + p.nom + " »" +
+        "Je suis intéressé(e) par votre produit « " + p.nom + " »" +
         (p.code ? " (code " + p.code + ")" : "") +
         (p.prix_visible ? " à " + fmtPrix(p, atelier) : "") +
         ", vue sur l'application Atelier.\nEst-elle disponible ?";
@@ -616,7 +616,7 @@ const VueBoutique = (() => {
       '<div class="fiche-infos">' +
       '<div class="carte">' +
         '<div class="paires">' +
-          '<div class="paire"><span class="l">Réalisation</span><span class="v">' + e(p.nom) + "</span></div>" +
+          '<div class="paire"><span class="l">Produit</span><span class="v">' + e(p.nom) + "</span></div>" +
           (p.code ? '<div class="paire"><span class="l">Code</span><span class="v">' + e(p.code) + "</span></div>" : "") +
           '<div class="paire"><span class="l">Catégorie</span><span class="v">' + e(p.categorie || "Autres") + "</span></div>" +
           /* La fiche mode : chaque ligne n'apparaît que si elle a
@@ -667,7 +667,7 @@ const VueBoutique = (() => {
               : '<span class="pastille">' + e((atelier.nom || "?")[0].toUpperCase()) + "</span>") +
             '<span style="flex:1;min-width:0">' +
               '<span class="ligne-titre">' + e(atelier.nom) + "</span>" +
-              '<span class="ligne-sous">' + e(atelier.slogan || "Voir toutes ses réalisations") + "</span>" +
+              '<span class="ligne-sous">' + e(atelier.slogan || "Voir tous ses produits") + "</span>" +
             "</span>" +
             UI.icone("retour", "ic-sm") +
           "</button>"
@@ -713,7 +713,7 @@ const VueBoutique = (() => {
           '<span class="ligne-sous">' + e(a.slogan || "Atelier de couture") + "</span>" +
         "</span>" +
         '<span class="ligne-fin"><span class="badge badge-fait">' +
-          (nbProduits[a.id] || 0) + " réalisation" + ((nbProduits[a.id] || 0) > 1 ? "s" : "") +
+          (nbProduits[a.id] || 0) + " produit" + ((nbProduits[a.id] || 0) > 1 ? "s" : "") +
         "</span></span>" +
       "</button>";
 
@@ -763,7 +763,7 @@ const VueBoutique = (() => {
       '<div style="margin-top:14px">' +
         (produits.length
           ? grilleParCategorie(produits, { [a.id]: a })
-          : UI.vide("image", "Aucune réalisation publiée", "Cet atelier ajoutera bientôt ses créations.")) +
+          : UI.vide("image", "Aucun produit publié", "Cet atelier ajoutera bientôt ses créations.")) +
       "</div>";
   }
 

@@ -1,6 +1,6 @@
 /* =========================================================
    Vue Produits (administrateur) — la vitrine de l'atelier :
-   réalisations avec nom, code, catégorie, prix (visible ou
+   produits avec nom, code, catégorie, prix (visible ou
    non du public) et jusqu'à 4 photos. Publiées dans la
    boutique publique tant que l'abonnement est à jour.
    ========================================================= */
@@ -37,27 +37,27 @@ const VueProduits = (() => {
     "</div>";
 
   /** Miniature de couverture recalculée depuis la première photo. */
-  /* ---------- Liste des réalisations de l'atelier ---------- */
+  /* ---------- Liste des produits de l'atelier ---------- */
 
   async function liste(vue) {
     const produits = await Api.listerPar("produits", "atelier_id", Api.atelierId(), "cree_le", false);
 
     UI.entete({
       titre: "Vitrine",
-      sous: produits.length + " réalisation" + (produits.length > 1 ? "s" : "") + " publiée" + (produits.length > 1 ? "s" : ""),
+      sous: produits.length + " produit" + (produits.length > 1 ? "s" : "") + " publié" + (produits.length > 1 ? "s" : ""),
       actions:
         (Api.aDroitStock()
           ? '<a class="btn-ic" href="#/stock" aria-label="Gestion de stock">' +
               UI.icone("boutique") + "</a>"
           : "") +
-        '<a class="btn-ic" href="#/produit-gere/nouveau" aria-label="Nouvelle réalisation">' + UI.icone("plus") + "</a>",
+        '<a class="btn-ic" href="#/produit-gere/nouveau" aria-label="Nouveau produit">' + UI.icone("plus") + "</a>",
     });
 
     if (!produits.length) {
-      vue.innerHTML = UI.vide("image", "Aucune réalisation",
+      vue.innerHTML = UI.vide("image", "Aucun produit",
         "Publiez vos créations : elles apparaîtront dans la boutique publique de l'application, " +
         "avec un bouton de commande WhatsApp.",
-        '<a class="btn" href="#/produit-gere/nouveau">' + UI.icone("plus", "ic-sm") + "Ajouter une réalisation</a>");
+        '<a class="btn" href="#/produit-gere/nouveau">' + UI.icone("plus", "ic-sm") + "Ajouter un produit</a>");
       return;
     }
 
@@ -98,7 +98,7 @@ const VueProduits = (() => {
           ).join("") +
         "</div>"
       ).join("") +
-      '<p class="pied-note">Vos réalisations sont visibles du public tant que votre abonnement est à jour.</p>';
+      '<p class="pied-note">Vos produits sont visibles du public tant que votre abonnement est à jour.</p>';
   }
 
   /* ---------- Création / modification ---------- */
@@ -129,8 +129,8 @@ const VueProduits = (() => {
     };
 
     UI.entete({
-      titre: produit ? "Modifier la réalisation" : "Nouvelle réalisation",
-      sous: produit ? produit.nom : "Publiée dans la boutique publique",
+      titre: produit ? "Modifier le produit" : "Nouveau produit",
+      sous: produit ? produit.nom : "Publié dans la boutique publique",
       retour: true,
     });
 
@@ -146,7 +146,7 @@ const VueProduits = (() => {
 
         '<div class="carte">' +
           '<div class="carte-titre">' + UI.icone("crayon", "ic-sm") + "L'essentiel</div>" +
-          '<div class="champ"><label for="prod-nom">Nom de la réalisation <span class="obligatoire">*</span></label>' +
+          '<div class="champ"><label for="prod-nom">Nom du produit <span class="obligatoire">*</span></label>' +
             '<input id="prod-nom" autocomplete="off" autocapitalize="sentences" value="' + e(produit ? produit.nom : "") + '"></div>' +
           '<div class="champ"><label for="prod-code">Code</label>' +
             '<input id="prod-code" autocomplete="off" placeholder="ex. RB-001" value="' +
@@ -207,11 +207,11 @@ const VueProduits = (() => {
         "</div>" +
 
         '<button type="submit" class="btn btn-bloc" id="prod-enregistrer">' +
-          UI.icone("check", "ic-sm") + (produit ? "Enregistrer les modifications" : "Publier la réalisation") + "</button>" +
+          UI.icone("check", "ic-sm") + (produit ? "Enregistrer les modifications" : "Publier le produit") + "</button>" +
       "</form>" +
       (produit
         ? '<button type="button" class="btn btn-danger btn-bloc" id="prod-supprimer" style="margin-top:10px">' +
-            UI.icone("poubelle", "ic-sm") + "Retirer cette réalisation</button>"
+            UI.icone("poubelle", "ic-sm") + "Retirer ce produit</button>"
         : "");
 
     /* Photos */
@@ -246,8 +246,11 @@ const VueProduits = (() => {
       for (const fichier of fichiers) {
         if (photos.length >= MAX_PHOTOS) { UI.toast(MAX_PHOTOS + " photos maximum", "erreur"); break; }
         try {
-          const { dataUrl } = await Utils.compresserImage(fichier);
-          photos.push({ apercu: dataUrl, fichier });
+          /* Une seule lecture : l'aperçu ET le fichier à déposer sortent
+             du même passage. Relire plus tard le fichier d'Android
+             échouait — voir Utils.preparerImage. */
+          const { dataUrl, blob } = await Utils.preparerImage(fichier);
+          photos.push({ apercu: dataUrl, blob });
         } catch (_) {
           UI.toast("Image illisible", "erreur");
         }
@@ -347,7 +350,7 @@ const VueProduits = (() => {
 
     /* La catégorie se choisit aussi à la puce : c'était le second champ à
        liste de suggestions, muet lui aussi dans la WebView d'Android. Un
-       seul rayon par réalisation — mais la liste s'ouvre. */
+       seul rayon par produit — mais la liste s'ouvre. */
     function rendreCategorie() {
       const toutes = new Set(Mode.CATEGORIES.concat(categories).concat(categorie ? [categorie] : []));
       UI.$("#prod-categorie").innerHTML =
@@ -446,7 +449,7 @@ const VueProduits = (() => {
       ev.preventDefault();
       const nom = UI.$("#prod-nom").value.trim();
       const prix = Utils.lireNombre(UI.$("#prod-prix").value);
-      if (!nom) { UI.toast("Indiquez le nom de la réalisation", "erreur"); return; }
+      if (!nom) { UI.toast("Indiquez le nom du produit", "erreur"); return; }
       if (prix <= 0) { UI.toast("Indiquez le prix", "erreur"); return; }
 
       const bouton = UI.$("#prod-enregistrer");
@@ -457,8 +460,9 @@ const VueProduits = (() => {
         bouton.textContent = "Envoi des photos…";
         const gardees = [];
         for (const ph of photos) {
-          gardees.push(ph.fichier
-            ? await Stockage.deposerImage(ph.fichier, Stockage.VITRINE, "produits")
+          gardees.push(ph.blob
+            ? await Stockage.deposerImage(ph.blob, Stockage.VITRINE, "produits",
+                { dejaPrete: true })
             : ph.valeur);
         }
 
@@ -468,8 +472,10 @@ const VueProduits = (() => {
            — la régénérer demanderait de retélécharger le fichier. */
         let couverture = "";
         if (photos.length) {
-          couverture = photos[0].fichier
-            ? await Stockage.deposerImage(photos[0].fichier, Stockage.VITRINE, "couvertures",
+          /* La couverture se recalcule depuis le Blob déjà en mémoire :
+             une vignette plus petite, sans retoucher au fichier d'origine. */
+          couverture = photos[0].blob
+            ? await Stockage.deposerImage(photos[0].blob, Stockage.VITRINE, "couvertures",
                 { coteMax: 420, qualite: 0.7 })
             : ((produit && produit.couverture) || gardees[0] || "");
         }
@@ -529,7 +535,7 @@ const VueProduits = (() => {
             position: i,
           });
         }
-        UI.toast(produit ? "Réalisation mise à jour" : "Réalisation publiée", "ok");
+        UI.toast(produit ? "Produit mis à jour" : "Produit publié", "ok");
         location.hash = "#/produits";
       } catch (err) {
         UI.toast(err.message || "Enregistrement impossible", "erreur");
@@ -541,7 +547,7 @@ const VueProduits = (() => {
     if (supprimer) {
       supprimer.onclick = async () => {
         const ok = await UI.confirmer({
-          titre: "Retirer la réalisation",
+          titre: "Retirer le produit",
           texte: "« " + produit.nom + " » et ses photos seront retirées de la boutique publique.",
           bouton: "Retirer", danger: true,
         });
@@ -554,7 +560,7 @@ const VueProduits = (() => {
           .concat([produit.couverture]);
         await Api.supprimerLigne("produits", produit.id);
         await Stockage.retirer(aRetirer, Stockage.VITRINE);
-        UI.toast("Réalisation retirée", "ok");
+        UI.toast("Produit retiré", "ok");
         location.hash = "#/produits";
       };
     }

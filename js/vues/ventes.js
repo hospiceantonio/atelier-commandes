@@ -19,7 +19,7 @@ const VueVentes = (() => {
 
     if (!produits.length) {
       vue.innerHTML = UI.vide("boutique", "Aucun article en stock",
-        "Ajoutez du stock à vos réalisations depuis l'onglet Vitrine pour pouvoir les vendre.",
+        "Ajoutez du stock à vos produits depuis l'onglet Vitrine pour pouvoir les vendre.",
         '<a class="btn" href="#/produits">' + UI.icone("boutique", "ic-sm") + "Aller à la vitrine</a>");
       return;
     }

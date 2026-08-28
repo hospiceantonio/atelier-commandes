@@ -2,7 +2,7 @@
    Gestion de stock — approvisionnement, inventaire, sortie.
 
    Réservée à la formule Vitrine : c'est elle qui porte les
-   réalisations et la vente au comptoir.
+   produits et la vente au comptoir.
 
    Aucune de ces vues n'écrit la colonne « stock ». Elles appellent les
    fonctions de supabase/stock.sql, qui bougent le stock et écrivent le
@@ -74,7 +74,7 @@ const VueStock = (() => {
                 const p = parId.get(m.produit_id);
                 const signe = m.quantite > 0 ? "+" : "";
                 return '<div class="mini"><span class="l"><strong>' +
-                    e(p ? p.nom : "Réalisation retirée") + "</strong>" +
+                    e(p ? p.nom : "Produit retiré") + "</strong>" +
                     '<br><span style="color:var(--encre-tres-douce);font-size:12px">' +
                       e(Store.libelleMouvement(m.type)) +
                       (m.motif ? " · " + e(m.motif) : "") +
@@ -107,8 +107,8 @@ const VueStock = (() => {
     });
 
     if (!produits.length) {
-      vue.innerHTML = UI.vide("boutique", "Aucune réalisation",
-        "Publiez d'abord une réalisation dans votre vitrine.",
+      vue.innerHTML = UI.vide("boutique", "Aucun produit",
+        "Publiez d'abord un produit dans votre vitrine.",
         '<a class="btn" href="#/produits">' + UI.icone("boutique", "ic-sm") + "Aller à la vitrine</a>");
       return;
     }
@@ -117,7 +117,7 @@ const VueStock = (() => {
 
     vue.innerHTML =
       '<div class="carte">' +
-        '<div class="carte-titre">' + UI.icone("boutique", "ic-sm") + "Réalisation</div>" +
+        '<div class="carte-titre">' + UI.icone("boutique", "ic-sm") + "Produit</div>" +
         '<div class="recherche" style="margin-bottom:10px">' + UI.icone("recherche") +
           '<input id="q-stock" type="search" placeholder="Nom ou code…" autocomplete="off">' +
         "</div>" +
@@ -164,7 +164,7 @@ const VueStock = (() => {
               '<span class="v">' + (Number(p.stock) || 0) + " en stock</span>" +
             "</button>"
           ).join("")
-        : '<p class="aide" style="margin:0">Aucune réalisation ne correspond.</p>';
+        : '<p class="aide" style="margin:0">Aucun produit ne correspond.</p>';
     }
     rendreListe();
 
@@ -172,7 +172,7 @@ const VueStock = (() => {
       const p = produits.find((x) => x.id === choisi);
       const bouton = UI.$("#mv-valider");
       if (!p) {
-        UI.$("#mv-apercu").textContent = "Choisissez d'abord une réalisation.";
+        UI.$("#mv-apercu").textContent = "Choisissez d'abord un produit.";
         bouton.disabled = true;
         return;
       }
@@ -246,8 +246,8 @@ const VueStock = (() => {
     });
 
     if (!produits.length) {
-      vue.innerHTML = UI.vide("boutique", "Aucune réalisation",
-        "Publiez d'abord une réalisation dans votre vitrine.",
+      vue.innerHTML = UI.vide("boutique", "Aucun produit",
+        "Publiez d'abord un produit dans votre vitrine.",
         '<a class="btn" href="#/produits">' + UI.icone("boutique", "ic-sm") + "Aller à la vitrine</a>");
       return;
     }
@@ -265,7 +265,7 @@ const VueStock = (() => {
         '<div class="carte">' +
           '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Comptage</div>" +
           '<div class="inventaire">' +
-            '<div class="inv-tete"><span>Réalisation</span><span>Théorique</span><span>Compté</span></div>' +
+            '<div class="inv-tete"><span>Produit</span><span>Théorique</span><span>Compté</span></div>' +
             produits.map((p) =>
               '<div class="inv-ligne" data-ligne="' + p.id + '">' +
                 '<span class="inv-nom"><strong>' + e(p.nom) + "</strong>" +

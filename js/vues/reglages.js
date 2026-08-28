@@ -131,10 +131,10 @@ const VueReglages = (() => {
       champLogo.value = "";
       if (!fichier) return;
       try {
-        const { dataUrl } = await Utils.compresserImage(fichier, 400, 0.82);
+        const { dataUrl, blob } = await Utils.preparerImage(fichier, 400, 0.82);
         /* L'aperçu est immédiat ; le dépôt n'a lieu qu'à l'enregistrement,
            pour ne rien laisser dans le bucket si l'on renonce. */
-        logoFichier = fichier;
+        logoFichier = blob;
         logoDataUrl = dataUrl;
         apercu.src = dataUrl;
         apercu.hidden = false;
@@ -150,7 +150,7 @@ const VueReglages = (() => {
         let logo = logoDataUrl;
         if (logoFichier) {
           logo = await Stockage.deposerImage(logoFichier, Stockage.VITRINE, "logo",
-            { coteMax: 400, qualite: 0.82 });
+            { dejaPrete: true });
           /* Déposé : le formulaire porte désormais le chemin, pas l'aperçu.
              Sans cela, un second enregistrement réécrirait la data-url. */
           logoFichier = null;

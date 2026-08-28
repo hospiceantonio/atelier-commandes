@@ -70,11 +70,18 @@ const Stockage = (() => {
   /**
    * Compresse puis dépose. Renvoie le chemin à ranger en base.
    * `sousDossier` est relatif à l'atelier : « produits/<id> », « logo »…
+   *
+   * `source` est le fichier choisi, ou — et c'est ce qu'il faut préférer
+   * — le Blob déjà préparé à la prise de vue par Utils.preparerImage,
+   * signalé par `options.dejaPrete`. Le fichier rendu par Android n'est
+   * lisible qu'un temps : le relire ICI échouait sur une photo pourtant
+   * visible à l'écran. Un Blob, lui, vit en mémoire.
    */
-  async function deposerImage(fichier, bucket, sousDossier, options) {
+  async function deposerImage(source, bucket, sousDossier, options) {
     const o = options || {};
-    const { blob } = await Utils.compresserVersBlob(
-      fichier, o.coteMax || 1100, o.qualite || 0.72);
+    const blob = (o.dejaPrete && source instanceof Blob)
+      ? source
+      : (await Utils.compresserVersBlob(source, o.coteMax || 1100, o.qualite || 0.72)).blob;
     const dossier = bucket === BANNIERES ? "" : cheminAtelier(o.atelierId) + "/";
     const chemin = dossier + (sousDossier ? sousDossier + "/" : "") + jeton() + ".jpg";
     await Api.deposerFichier(bucket, chemin, blob, "image/jpeg");
@@ -89,7 +96,7 @@ const Stockage = (() => {
       await Api.supprimerFichiers(bucket || VITRINE, chemins);
     } catch (_) {
       /* Un fichier orphelin coûte quelques kilo-octets ; échouer ici
-         empêcherait l'utilisateur de supprimer sa réalisation. */
+         empêcherait l'utilisateur de supprimer son produit. */
     }
   }
 

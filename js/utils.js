@@ -264,6 +264,31 @@ const Utils = (() => {
    * ce qui transite.
    */
   async function compresserVersBlob(fichier, coteMax = 1100, qualite = 0.72) {
+    const { toile, cl, ch } = await dessiner(fichier, coteMax);
+    return { blob: await versBlob(toile, qualite), largeur: cl, hauteur: ch };
+  }
+
+  /**
+   * Une photo prête à afficher ET à déposer, EN UNE SEULE LECTURE.
+   *
+   * C'est le point. Le fichier rendu par l'appareil photo d'Android est
+   * adossé à une autorisation passagère : lu à la prise de vue pour
+   * l'aperçu, il pouvait être devenu illisible au moment d'enregistrer —
+   * « Lecture de l'image impossible » tombait alors sur une photo qu'on
+   * voyait pourtant à l'écran. On lit donc une fois, et on garde le Blob,
+   * qui vit en mémoire et se relit sans rien demander à personne.
+   */
+  async function preparerImage(fichier, coteMax = 1100, qualite = 0.72) {
+    const { toile, cl, ch } = await dessiner(fichier, coteMax);
+    return {
+      dataUrl: toile.toDataURL("image/jpeg", qualite),
+      blob: await versBlob(toile, qualite),
+      largeur: cl, hauteur: ch,
+    };
+  }
+
+  /** Le tronc commun : lire, redimensionner, peindre. */
+  async function dessiner(fichier, coteMax) {
     const source = await chargerImage(fichier);
     const l = source.width, h = source.height;
     const ratio = Math.min(1, coteMax / Math.max(l, h));
@@ -277,13 +302,14 @@ const Utils = (() => {
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(source, 0, 0, cl, ch);
     if (source.close) source.close();
+    return { toile, cl, ch };
+  }
 
-    const blob = await new Promise((resoudre, rejeter) => {
+  const versBlob = (toile, qualite) =>
+    new Promise((resoudre, rejeter) => {
       toile.toBlob((b) => (b ? resoudre(b) : rejeter(new Error("Compression impossible"))),
         "image/jpeg", qualite);
     });
-    return { blob, largeur: cl, hauteur: ch };
-  }
 
   function chargerImage(fichier) {
     // createImageBitmap redresse la photo selon l'orientation EXIF du téléphone.
@@ -320,6 +346,6 @@ const Utils = (() => {
     fmtDateHeure, fmtHeure, ecartJours, delai, MOIS, MOIS_COURT,
     normaliserTel, lienWhatsApp, lienTel, fmtTel, telAppel, telWhatsApp, imprimerA4,
     initiales, nomComplet, sansAccent, tempo, remplirModele, telecharger,
-    compresserImage, compresserVersBlob, tailleLisible,
+    compresserImage, compresserVersBlob, preparerImage, tailleLisible,
   };
 })();

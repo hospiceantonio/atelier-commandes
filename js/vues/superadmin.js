@@ -249,8 +249,8 @@ const VueSuperAdmin = (() => {
       champLogo.value = "";
       if (!fichier) return;
       try {
-        const { dataUrl } = await Utils.compresserImage(fichier, 400, 0.82);
-        logoFichier = fichier;
+        const { dataUrl, blob } = await Utils.preparerImage(fichier, 400, 0.82);
+        logoFichier = blob;
         logoDataUrl = dataUrl;
         apercu.src = dataUrl;
         apercu.hidden = false;
@@ -294,7 +294,7 @@ const VueSuperAdmin = (() => {
            n'existe qu'une fois la ligne créée : d'où ce second temps. */
         if (logoFichier) {
           const chemin = await Stockage.deposerImage(logoFichier, Stockage.VITRINE,
-            "logo", { coteMax: 400, qualite: 0.82, atelierId: atelier.id });
+            "logo", { dejaPrete: true, atelierId: atelier.id });
           atelier = await Api.mettreAJour("ateliers", atelier.id, { logo: chemin });
         }
 
@@ -849,7 +849,7 @@ const VueSuperAdmin = (() => {
       "</div>" +
 
       "<div class='resume petit'>" +
-        bloc("Réalisations postées", p("realisations_periode", "realisations"),
+        bloc("Produits postés", p("realisations_periode", "realisations"),
           stats.realisations + " au total", "") +
         bloc("Commandes livrées", p("commandes_livrees_periode", "commandes_livrees"),
           p("commandes_periode", "commandes") + " créée" +
@@ -1080,7 +1080,7 @@ const VueSuperAdmin = (() => {
         "</button>"
       ).join("") +
       "</div>" +
-      '<p class="pied-note">Les bannières ouvrent le carrousel « À la une », avant les réalisations.</p>';
+      '<p class="pied-note">Les bannières ouvrent le carrousel « À la une », avant les produits.</p>';
   }
 
   async function formulaireBanniere(vue, id) {
@@ -1147,8 +1147,8 @@ const VueSuperAdmin = (() => {
       champ.value = "";
       if (!fichier) return;
       try {
-        const { dataUrl } = await Utils.compresserImage(fichier, 1000, 0.82);
-        imageFichier = fichier;
+        const { dataUrl, blob } = await Utils.preparerImage(fichier, 1000, 0.82);
+        imageFichier = blob;
         imageDataUrl = dataUrl;
         apercu.src = dataUrl;
         apercu.hidden = false;
@@ -1172,7 +1172,7 @@ const VueSuperAdmin = (() => {
         };
         if (imageFichier) {
           valeurs.image = await Stockage.deposerImage(imageFichier, Stockage.BANNIERES,
-            null, { coteMax: 1000, qualite: 0.82 });
+            null, { dejaPrete: true });
         }
         if (banniere) {
           await Api.mettreAJour("bannieres", banniere.id, valeurs);
@@ -1234,7 +1234,7 @@ const VueSuperAdmin = (() => {
           (p("renouvellements_periode", "renouvellements") > 1 ? "s" : "")) +
         tuile("tuile-vert", "stats", "Total encaissé", Utils.fmtMontant(s.encaisse_total, devise),
           "depuis le début · " + s.renouvellements + " au total") +
-        tuile("", "boutique", "Réalisations postées", p("realisations_periode", "realisations"),
+        tuile("", "boutique", "Produits postés", p("realisations_periode", "realisations"),
           s.realisations + " au total · " + s.realisations_en_avant + " à la une") +
         tuile("", "check", "Commandes livrées", p("commandes_livrees_periode", "commandes_livrees"),
           p("commandes_periode", "commandes") + " créée" +
