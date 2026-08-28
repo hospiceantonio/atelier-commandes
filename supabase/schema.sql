@@ -43,6 +43,32 @@ create table if not exists public.profils (
   cree_le      timestamptz not null default now()
 );
 
+-- La ligne « Modèle » est arrivée dans le message type après coup : sur
+-- une base plus ancienne, les nouveaux ateliers naissaient sans elle.
+alter table public.ateliers alter column modele_whatsapp set default
+  'Bonjour {prenom} 👋' || E'\n' ||
+  'Votre commande {numero} chez {atelier} :' || E'\n' ||
+  '• Modèle : {description}' || E'\n' ||
+  '• Livraison prévue : {livraison}' || E'\n' ||
+  '• Montant : {montant}' || E'\n' ||
+  '• Acompte reçu : {acompte}' || E'\n' ||
+  '• Reste à payer : {solde}' || E'\n' ||
+  'Merci pour votre confiance !';
+
+-- « create table if not exists » ne touche RIEN d'une table déjà là : ni
+-- une colonne ajoutée depuis, ni une contrainte élargie. Le rôle
+-- « moderateur » est arrivé après la première version de ce fichier ; les
+-- bases installées avant continuaient donc de le refuser, et le
+-- rattachement d'un modérateur s'y brisait sur profils_role_check —
+-- longtemps en silence, le garde des profils ramenant le rôle en arrière
+-- avant que la contrainte n'ait son mot à dire.
+--
+-- RÈGLE : toute modification d'un bloc « create table » ci-dessus se
+-- redit ici, sous une forme qui rattrape les bases déjà installées.
+alter table public.profils drop constraint if exists profils_role_check;
+alter table public.profils add constraint profils_role_check
+  check (role in ('superadmin', 'admin', 'moderateur'));
+
 create table if not exists public.clients (
   id           uuid primary key default gen_random_uuid(),
   atelier_id   uuid not null references public.ateliers (id) on delete cascade,
@@ -794,7 +820,6 @@ alter table public.produits add column if not exists stock integer not null defa
 alter table public.produits add column if not exists en_avant boolean not null default false;
 
 alter table public.compteurs add column if not exists prochaine_facture integer not null default 1;
-alter table public.ventes add column if not exists client_whatsapp text not null default '';
 
 create table if not exists public.ventes (
   id         uuid primary key default gen_random_uuid(),
@@ -808,6 +833,10 @@ create table if not exists public.ventes (
   note       text not null default '',
   cree_le    timestamptz not null default now()
 );
+
+-- Rattrapage des bases installées avant que la facture porte le numéro
+-- WhatsApp du client (voir la règle posée près de « profils »).
+alter table public.ventes add column if not exists client_whatsapp text not null default '';
 
 create index if not exists ventes_par_atelier on public.ventes (atelier_id);
 

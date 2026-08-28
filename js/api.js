@@ -26,6 +26,14 @@ const Api = (() => {
        remonter le jargon de PostgREST. */
     "Could not find the function":
       "Fonction absente du serveur — exécutez les scripts du dossier supabase/ dans Supabase (SQL Editor).",
+    /* Sentinelle du rattrapage par adresse : elle ne dit jamais à qui
+       appartient l'adresse refusée. */
+    "ADRESSE_PRISE": "Un compte existe déjà avec cet email.",
+    /* Une base installée avant l'arrivée des modérateurs garde une
+       contrainte qui ne connaît que « superadmin » et « admin ». */
+    'violates check constraint "profils_role_check"':
+      "Cette base n'accepte pas encore le rôle « modérateur » — exécutez " +
+      "supabase/reparer-schema.sql dans Supabase (SQL Editor).",
   };
 
   function traduire(erreur) {
@@ -351,6 +359,11 @@ const Api = (() => {
   }
 
   const rattacherModerateur = (id) => rattacher("rattacher_moderateur", { p_utilisateur: id });
+  /** Rattrapage : le compte de connexion existe déjà — un essai
+      précédent l'a créé sans le rattacher. Le serveur ne l'accepte que
+      s'il n'a pas d'atelier et vient d'être créé. */
+  const rattacherModerateurParEmail = (email) =>
+    rattacher("rattacher_moderateur_par_email", { p_email: email });
   const rattacherAdmin = (id, atelier_id) =>
     rattacher("rattacher_admin", { p_utilisateur: id, p_atelier: atelier_id });
 
@@ -456,7 +469,8 @@ const Api = (() => {
     connecte, role, lireProfil, lireAtelier, atelierId, rafraichirAtelier,
     lireParametres, majParametres, estAdmin, aDroit, aDroitStock, lireDroits, DROITS,
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
-    creerCompte, creerCompteAdmin, rattacherModerateur, rattacherAdmin, deconnexion,
+    creerCompte, creerCompteAdmin, deconnexion,
+    rattacherModerateur, rattacherModerateurParEmail, rattacherAdmin,
     listerFormules, creerMonAtelier, formuleCourante, aModuleAtelier, aModuleVitrine,
     demanderChangementFormule, annulerChangementFormule,
     approvisionnerStock, sortirStock, inventorierStock, annulerVente,

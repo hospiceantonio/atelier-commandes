@@ -74,7 +74,71 @@ revoke all on function public.rattacher_moderateur(uuid) from public;
 grant execute on function public.rattacher_moderateur(uuid) to authenticated;
 
 
--- ---------- 2. Le superadministrateur rattache un administrateur ----------
+-- ---------- 2. Rattraper un compte créé mais non rattaché ----------
+--
+-- La création d'un modérateur se fait en deux temps : le compte de
+-- connexion d'abord, le rattachement ensuite. Si le second échoue — une
+-- coupure, un serveur lent — le compte existe, l'adresse est prise, et
+-- réessayer se heurte à « un compte existe déjà avec cet email ».
+-- L'administrateur était alors coincé : il fallait aller supprimer le
+-- compte dans Supabase.
+--
+-- Cette fonction referme la boucle : réessayer rattache le compte au lieu
+-- d'en créer un second.
+--
+-- SA PORTÉE EST ÉTROITE, et volontairement pas plus large que ce que la
+-- règle profils_modification autorise déjà : un compte sans atelier créé
+-- dans l'heure, ou un compte qui est DÉJÀ de cet atelier. Sans cette
+-- limite, un administrateur pourrait s'attacher, en devinant son adresse,
+-- le compte de quelqu'un qui vient de s'inscrire pour ouvrir sa propre
+-- maison — et l'empêcher de l'ouvrir.
+--
+-- Elle ne dit jamais À QUI appartient une adresse qu'elle refuse : elle
+-- lève « ADRESSE_PRISE », que l'application traduit par le même message
+-- dans tous les cas.
+
+create or replace function public.rattacher_moderateur_par_email(p_email text)
+returns public.profils language plpgsql security definer set search_path = public as
+$$
+declare
+  a     uuid := public.atelier_courant();
+  cible public.profils%rowtype;
+begin
+  if a is null or not public.est_admin() then
+    raise exception 'Réservé à l''administrateur de l''atelier.';
+  end if;
+
+  select * into cible from public.profils
+   where lower(email) = lower(btrim(p_email)) for update;
+  if not found then
+    raise exception 'ADRESSE_PRISE';
+  end if;
+  if cible.role = 'superadmin' then
+    raise exception 'ADRESSE_PRISE';
+  end if;
+  -- Déjà des nôtres : le dire. Sans quoi l'administrateur croirait avoir
+  -- créé un compte avec le mot de passe qu'il vient de saisir, alors que
+  -- rien n'a changé.
+  if cible.atelier_id is not distinct from a then
+    raise exception 'Ce compte fait déjà partie de votre équipe.';
+  end if;
+
+  -- « is null » et non « = a » : comparer NULL avec l'égalité donne NULL,
+  -- et « if NULL » ne déclenche rien. Écrite avec « = », cette garde
+  -- laissait passer TOUT compte sans atelier, quel que soit son âge.
+  if not (cible.atelier_id is null and cible.cree_le > now() - interval '1 hour') then
+    raise exception 'ADRESSE_PRISE';
+  end if;
+
+  return public.rattacher_moderateur(cible.id);
+end
+$$;
+
+revoke all on function public.rattacher_moderateur_par_email(text) from public;
+grant execute on function public.rattacher_moderateur_par_email(text) to authenticated;
+
+
+-- ---------- 3. Le superadministrateur rattache un administrateur ----------
 
 create or replace function public.rattacher_admin(p_utilisateur uuid, p_atelier uuid)
 returns public.profils language plpgsql security definer set search_path = public as

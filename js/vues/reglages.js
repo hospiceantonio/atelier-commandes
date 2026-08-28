@@ -314,12 +314,26 @@ const VueReglages = (() => {
         const bouton = UI.$("#mod-creer", corps);
         bouton.disabled = true;
         try {
-          const utilisateur = await Api.creerCompteAdmin(email, motDePasse, nom,
-            UI.$("#mod-tel", corps).value.trim());
-          await Api.rattacherModerateur(utilisateur.id);
+          /* Un compte se crée en deux temps : la connexion d'abord, le
+             rattachement ensuite. Si le second a échoué une fois, le
+             compte existe et l'adresse est prise — recommencer se
+             heurtait alors à « un compte existe déjà », sans issue.
+             On rattrape ce compte-là au lieu d'en demander un autre. */
+          let repris = false;
+          let utilisateur = null;
+          try {
+            utilisateur = await Api.creerCompteAdmin(email, motDePasse, nom,
+              UI.$("#mod-tel", corps).value.trim());
+          } catch (err) {
+            if (!/existe déjà/i.test(err.message || "")) throw err;
+            await Api.rattacherModerateurParEmail(email);
+            repris = true;
+          }
+          if (utilisateur) await Api.rattacherModerateur(utilisateur.id);
+
           UI.feuilleSansRappel();
           UI.fermerFeuille();
-          UI.toast("Modérateur ajouté", "ok");
+          UI.toast(repris ? "Compte existant rattaché" : "Modérateur ajouté", "ok");
           rendreEquipe();
         } catch (err) {
           UI.toast(err.message || "Création impossible", "erreur");
