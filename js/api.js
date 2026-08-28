@@ -63,17 +63,51 @@ const Api = (() => {
     parametres = prm || null;
   }
 
+  /**
+   * Lit une ligne par son identifiant SANS .single().
+   *
+   * C'EST LE POINT. Avec .single(), zéro ligne est une erreur — la même
+   * forme qu'une lecture impossible. Impossible ensuite de distinguer
+   * « cette maison n'existe pas » de « je n'ai pas réussi à la lire »,
+   * et l'application choisissait la première explication. Sans .single(),
+   * une absence rend un tableau vide, et une erreur reste une erreur.
+   */
+  async function lireUne(table, id) {
+    const { data, error } = await client.from(table).select("*").eq("id", id).limit(1);
+    if (error) throw new Error(traduire(error));
+    return (data && data[0]) || null;
+  }
+
+  /* Vrai quand la session existe mais que son contexte n'a pas pu être
+     lu. On ne sait alors PAS où l'on en est — et surtout, on ne le
+     devine pas : l'écran le dit et propose de réessayer. */
+  let contexteEnEchec = false;
+  const contexteIndisponible = () => contexteEnEchec;
+
   async function chargerContexte() {
     profil = null;
     atelier = null;
+    contexteEnEchec = false;
     if (!session) return;
     await chargerParametres();
-    const { data: p } = await client.from("profils").select("*").eq("id", session.user.id).single();
-    if (!p) return;
-    profil = p;
-    if (p.atelier_id) {
-      const { data: a } = await client.from("ateliers").select("*").eq("id", p.atelier_id).single();
-      atelier = a || null;
+
+    /* Un jeton qui vient d'expirer, une coupure d'une seconde : la
+       première lecture rate, la suivante passe. On patiente donc une
+       fois avant de conclure quoi que ce soit. */
+    for (let essai = 0; essai < 2; essai++) {
+      try {
+        profil = await lireUne("profils", session.user.id);
+        atelier = (profil && profil.atelier_id)
+          ? await lireUne("ateliers", profil.atelier_id)
+          : null;
+        contexteEnEchec = false;
+        return;
+      } catch (_) {
+        profil = null;
+        atelier = null;
+        contexteEnEchec = true;
+        if (essai === 0) await new Promise((suite) => setTimeout(suite, 900));
+      }
     }
   }
 
@@ -431,10 +465,10 @@ const Api = (() => {
     return verifier(await requete) || [];
   }
 
-  async function lireLigne(table, id) {
-    const { data } = await client.from(table).select("*").eq("id", id).single();
-    return data || null;
-  }
+  /* Même règle que lireUne : une absence rend null, un échec de lecture
+     lève. Les deux rendaient null jusqu'ici, et l'application concluait
+     « ça n'existe pas » chaque fois qu'elle n'avait pas réussi à lire. */
+  const lireLigne = (table, id) => lireUne(table, id);
 
   async function inserer(table, objet) {
     return verifier(await client.from(table).insert(objet).select("*").single());
@@ -459,14 +493,30 @@ const Api = (() => {
     return verifier(await client.rpc(nom, params || {}));
   }
 
+  /**
+   * Relit l'atelier — après un paiement, un changement de formule, une
+   * modification des réglages.
+   *
+   * Une lecture ratée N'EFFACE PLUS l'atelier en mémoire. C'était le
+   * chemin le plus court vers le défaut signalé : on payait, on touchait
+   * « Vérifier », la relecture ratait, l'atelier devenait nul, et l'écran
+   * suivant proposait de choisir une formule à qui venait d'en payer une.
+   */
   async function rafraichirAtelier() {
-    if (profil && profil.atelier_id) atelier = await lireLigne("ateliers", profil.atelier_id);
+    if (!profil || !profil.atelier_id) return atelier;
+    try {
+      atelier = await lireUne("ateliers", profil.atelier_id);
+      contexteEnEchec = false;
+    } catch (_) {
+      contexteEnEchec = true;   // on garde l'atelier connu, et on le dit
+    }
     return atelier;
   }
 
   return {
     configOk, bibliothequeOk, init, chargerContexte,
     connecte, role, lireProfil, lireAtelier, atelierId, rafraichirAtelier,
+    contexteIndisponible,
     lireParametres, majParametres, estAdmin, aDroit, aDroitStock, lireDroits, DROITS,
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
     creerCompte, creerCompteAdmin, deconnexion,

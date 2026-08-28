@@ -210,6 +210,34 @@
     };
   }
 
+  /* La session tient, mais son contexte n'a pas pu être lu — jeton tout
+     juste expiré, réseau coupé une seconde. L'application ne DEVINE pas
+     ce qu'elle n'a pas lu : elle le dit et propose de réessayer. Avant,
+     elle concluait « ce compte n'a pas d'atelier » et déroulait le choix
+     d'une formule à qui payait déjà la sienne. */
+  function ecranContexteIndisponible() {
+    afficherVoile(boiteVoile(
+      "Connexion au serveur perdue",
+      "Vos informations n'ont pas pu être lues. Rien n'est perdu : " +
+        "vérifiez votre connexion et réessayez.",
+      '<button type="button" class="btn btn-bloc" id="voile-reessayer">Réessayer</button>' +
+      '<button type="button" class="btn btn-clair btn-bloc" id="voile-sortir" ' +
+        'style="margin-top:8px">Se déconnecter</button>'
+    ));
+    document.getElementById("voile-reessayer").onclick = async (ev) => {
+      const bouton = ev.currentTarget;
+      bouton.disabled = true;
+      bouton.textContent = "Nouvelle tentative…";
+      await Api.chargerContexte();
+      naviguer();
+    };
+    document.getElementById("voile-sortir").onclick = async () => {
+      await Api.deconnexion();
+      location.hash = "#/";
+      naviguer();
+    };
+  }
+
   async function ecranAbonnementExpire() {
     const r = Store.lireReglages();
     const paiementPossible = typeof Paiement !== "undefined" && Paiement.disponible();
@@ -315,6 +343,16 @@
     const moderateur = role === "moderateur";
     document.body.classList.toggle("mode-superadmin", superadmin);
 
+    /* Le contexte n'a pas pu être lu : on ne sait pas où l'on en est.
+       Le dire, et rien d'autre. C'est AVANT tout le reste, y compris
+       pour le superadministrateur — sans quoi une coupure d'une seconde
+       ferait passer un atelier abonné pour un compte sans maison, et
+       l'écran proposerait de choisir une formule à qui en a déjà une. */
+    if (Api.contexteIndisponible()) {
+      ecranContexteIndisponible();
+      return;
+    }
+
     if (!superadmin) {
       /* Compte sans maison : c'est l'inscription qui reprend la main. On
          y arrive aussi bien juste après la création du compte qu'en
@@ -323,7 +361,14 @@
         ecranCompteNonRelie();
         return;
       }
-      if (!Api.atelierId() || !Api.lireAtelier()) {
+      /* Un atelier RATTACHÉ mais illisible n'est pas un compte sans
+         maison : c'est une lecture qui a échoué, et l'inscription n'a
+         rien à faire là. */
+      if (Api.atelierId() && !Api.lireAtelier()) {
+        ecranContexteIndisponible();
+        return;
+      }
+      if (!Api.atelierId()) {
         document.getElementById("tabbar").innerHTML = "";
         ongletsRendus = null;
         masquerVoile();
