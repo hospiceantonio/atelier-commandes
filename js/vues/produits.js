@@ -151,12 +151,18 @@ const VueProduits = (() => {
           '<div class="champ"><label for="prod-code">Code</label>' +
             '<input id="prod-code" autocomplete="off" placeholder="ex. RB-001" value="' +
               e(produit ? produit.code : "") + '"></div>' +
-          '<div class="champ"><label>Catégorie</label>' +
-            '<div class="puces puces-grille" id="prod-categorie"></div>' +
-            champAjout("categorie", "Nom de la catégorie") + "</div>" +
+
           UI.champMontant({ id: "prod-prix", label: "Prix", valeur: produit ? produit.prix : "", obligatoire: true }) +
           bascule("prod-prix-visible", !produit || produit.prix_visible,
             "Afficher le prix", "Sinon la boutique affiche « Prix sur demande »") +
+        "</div>" +
+
+        '<div class="carte">' +
+          '<div class="carte-titre">' + UI.icone("boutique", "ic-sm") + "Rayon</div>" +
+          '<div class="carte-aide">Où ce produit se range dans votre vitrine. ' +
+            "Un seul rayon ; « + Autre » si le vôtre manque.</div>" +
+          '<div id="prod-categorie"></div>' +
+          champAjout("categorie", "Nom du rayon") +
         "</div>" +
 
         /* ---------- Mode ----------
@@ -263,6 +269,9 @@ const VueProduits = (() => {
        Android, la liste de suggestions d'un champ de saisie ne s'ouvre
        pas dans la WebView — le champ « tissu » y était muet. */
     let categorie = (produit && produit.categorie) || "";
+    /* Un rayon tapé à la main reste proposé le temps de la saisie, même
+       si l'on en essaie un autre entre-temps : on ne le retape pas. */
+    const rayonsTapes = [];
     let sexe = (produit && produit.sexe) || "";
     let age = (produit && produit.tranche_age) || "";
     let tailles = (produit && produit.tailles) ? produit.tailles.slice() : [];
@@ -351,13 +360,17 @@ const VueProduits = (() => {
     /* La catégorie se choisit aussi à la puce : c'était le second champ à
        liste de suggestions, muet lui aussi dans la WebView d'Android. Un
        seul rayon par produit — mais la liste s'ouvre. */
+    /* Trente-huit rayons rangés par familles, celle du rayon choisi en
+       tête. À plat, on ne lirait plus : on chercherait. */
     function rendreCategorie() {
-      const toutes = new Set(Mode.CATEGORIES.concat(categories).concat(categorie ? [categorie] : []));
       UI.$("#prod-categorie").innerHTML =
-        devant(Array.from(toutes), (n) => n === categorie).map((nom) =>
-          puce(nom, categorie === nom, "data-categorie", e(nom))).join("") +
-        puceAjout("categorie");
-      majRepli("categorie");
+        Mode.categories(categorie, categories.concat(rayonsTapes)).map((g) =>
+          '<div class="sous-titre-champ">' + e(g.titre) + "</div>" +
+          '<div class="puces puces-grille">' +
+            g.valeurs.map((nom) =>
+              puce(nom, categorie === nom, "data-categorie", e(nom))).join("") +
+          "</div>").join("") +
+        '<div class="puces puces-grille">' + puceAjout("categorie") + "</div>";
     }
 
     rendreCategorie();
@@ -438,7 +451,10 @@ const VueProduits = (() => {
     };
 
     listeOuverte("#prod-categorie", "data-categorie", "categorie",
-      (valeur) => { categorie = valeur; }, rendreCategorie);
+      (valeur, tape) => {
+        if (tape && rayonsTapes.indexOf(valeur) < 0) rayonsTapes.push(valeur);
+        categorie = valeur;
+      }, rendreCategorie);
     listeOuverte("#prod-couleurs", "data-couleur", "couleur",
       dansLaListe(couleurs), rendreCouleurs);
     listeOuverte("#prod-tissus", "data-tissu", "tissu",

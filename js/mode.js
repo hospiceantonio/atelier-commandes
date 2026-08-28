@@ -122,14 +122,56 @@ const Mode = (() => {
     "Cuir", "Simili cuir",
   ];
 
-  /* Rayons de départ d'une maison de couture. Comme les tissus, la liste
-     s'enrichit de ce que l'atelier emploie : elle amorce, elle n'enferme
-     pas. */
-  const CATEGORIES = [
-    "Robes", "Ensembles", "Boubous", "Chemises", "Pantalons", "Jupes",
-    "Vestes", "Tailleurs", "Tenues traditionnelles", "Tenues d'enfant",
-    "Accessoires", "Autres",
+  /* Rayons de départ d'une maison de mode. Rangés par familles : à cette
+     longueur, une liste à plat ne se lit plus — on cherche « Chaussures »
+     au lieu de le voir.
+
+     Comme les tissus, la liste s'enrichit de ce que l'atelier emploie :
+     elle amorce, elle n'enferme pas. Et elle reste dans un seul registre,
+     celui de ce qui se porte : rien pour la maison, rien pour la table. */
+  const CATEGORIES_GROUPES = [
+    { titre: "Vêtements", valeurs: [
+      "Robes", "Ensembles", "Chemises", "Chemisiers", "Hauts et t-shirts",
+      "Pantalons", "Jupes", "Shorts", "Vestes et blazers", "Combinaisons",
+      "Tailleurs",
+    ] },
+    { titre: "Tenues traditionnelles", valeurs: [
+      "Boubous", "Complets pagne", "Kaftans", "Tenues traditionnelles",
+    ] },
+    { titre: "Cérémonie", valeurs: [
+      "Tenues de mariage", "Tenues de cérémonie", "Tenues de soirée",
+    ] },
+    { titre: "Enfant", valeurs: [
+      "Tenues d'enfant", "Layette", "Uniformes scolaires",
+    ] },
+    { titre: "Autres tenues", valeurs: [
+      "Tenues de sport", "Pyjamas et nuisettes", "Maillots de bain",
+      "Lingerie", "Tenues de travail",
+    ] },
+    { titre: "Accessoires", valeurs: [
+      "Sacs", "Chaussures", "Chapeaux", "Foulards", "Écharpes", "Ceintures",
+      "Cravates et nœuds papillon", "Turbans et bandeaux", "Pochettes",
+      "Bijoux", "Gants",
+    ] },
+    { titre: "Divers", valeurs: ["Autres"] },
   ];
+
+  /* La même liste à plat, pour qui n'a que faire des familles. */
+  const CATEGORIES = CATEGORIES_GROUPES.reduce((tout, g) => tout.concat(g.valeurs), []);
+
+  /** Les familles, celle du rayon choisi en tête : sur un téléphone, ce
+      qui est retenu doit rester sous les yeux. Les rayons que l'atelier a
+      inventés forment une famille à part, jamais perdue. */
+  function categories(choisie, ajoutees) {
+    const connues = new Set(CATEGORIES);
+    const propres = (ajoutees || []).filter((c) => c && !connues.has(c));
+    const groupes = CATEGORIES_GROUPES.map((g) => ({ titre: g.titre, valeurs: g.valeurs }));
+    if (choisie && !connues.has(choisie) && propres.indexOf(choisie) < 0) propres.push(choisie);
+    if (propres.length) groupes.push({ titre: "Vos rayons", valeurs: propres });
+    groupes.sort((a, b) =>
+      (b.valeurs.indexOf(choisie) >= 0 ? 1 : 0) - (a.valeurs.indexOf(choisie) >= 0 ? 1 : 0));
+    return groupes;
+  }
 
   const etiquetteSexe = (code) => (SEXES.find((s) => s.code === code) || SEXES[0]).nom;
   const etiquetteAge = (code) => (AGES.find((a) => a.code === code) || AGES[0]).nom;
@@ -146,7 +188,8 @@ const Mode = (() => {
   }
 
   return {
-    SEXES, AGES, COULEURS, TISSUS, CATEGORIES, UNIQUE,
+    SEXES, AGES, COULEURS, TISSUS, CATEGORIES, CATEGORIES_GROUPES, UNIQUE,
+    categories,
     grilles, tonDe, etiquetteSexe, etiquetteAge, resume,
   };
 })();
