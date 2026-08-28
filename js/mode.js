@@ -112,13 +112,23 @@ const Mode = (() => {
 
   /* Suggestions de tissus : celles d'ici d'abord — le wax, le bazin et
      le kente ne figurent dans aucune nomenclature européenne — puis les
-     matières courantes. La saisie reste libre : une couturière de
-     Cotonou en connaît d'autres. */
+     matières courantes. La liste n'est qu'un point de départ : le
+     formulaire y ajoute ce que l'atelier a déjà employé, et « + Autre »
+     ouvre la porte au reste. */
   const TISSUS = [
     "Wax (pagne)", "Bazin riche", "Kente", "Basin brodé", "Tissu tissé",
     "Coton", "Lin", "Soie", "Satin", "Mousseline", "Dentelle", "Broderie anglaise",
     "Crêpe", "Jersey", "Velours", "Jean (denim)", "Laine", "Tulle", "Polyester",
     "Cuir", "Simili cuir",
+  ];
+
+  /* Rayons de départ d'une maison de couture. Comme les tissus, la liste
+     s'enrichit de ce que l'atelier emploie : elle amorce, elle n'enferme
+     pas. */
+  const CATEGORIES = [
+    "Robes", "Ensembles", "Boubous", "Chemises", "Pantalons", "Jupes",
+    "Vestes", "Tailleurs", "Tenues traditionnelles", "Tenues d'enfant",
+    "Accessoires", "Autres",
   ];
 
   const etiquetteSexe = (code) => (SEXES.find((s) => s.code === code) || SEXES[0]).nom;
@@ -136,7 +146,7 @@ const Mode = (() => {
   }
 
   return {
-    SEXES, AGES, COULEURS, TISSUS, UNIQUE,
+    SEXES, AGES, COULEURS, TISSUS, CATEGORIES, UNIQUE,
     grilles, tonDe, etiquetteSexe, etiquetteAge, resume,
   };
 })();

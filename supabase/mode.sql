@@ -25,9 +25,11 @@
 --   porte donc l'âge ET le centimètre, et c'est cette étiquette-là qui
 --   est gardée — celle que la cliente lit sur l'ourlet.
 --
--- • tissu reste un texte libre avec des suggestions. Le wax, le bazin
---   et le kente ne figurent dans aucune nomenclature européenne, et
---   une couturière de Cotonou en connaît d'autres que moi.
+-- • tissus est une liste, comme les couleurs : un modèle mêle souvent
+--   le wax et la dentelle. Le vocabulaire reste OUVERT — le wax, le
+--   bazin et le kente ne figurent dans aucune nomenclature européenne,
+--   et une couturière de Cotonou en connaît d'autres que moi : ce que
+--   l'atelier ajoute une fois lui est reproposé ensuite.
 --
 -- • sur_mesure et tendance sont deux drapeaux distincts de « en_avant » :
 --   « à la une » est un choix de vitrine, « tendance » un fait de mode,
@@ -43,9 +45,25 @@ alter table public.produits add column if not exists sexe         text not null 
 alter table public.produits add column if not exists tranche_age  text not null default '';
 alter table public.produits add column if not exists tailles      text[] not null default '{}';
 alter table public.produits add column if not exists couleurs     text[] not null default '{}';
-alter table public.produits add column if not exists tissu        text not null default '';
+alter table public.produits add column if not exists tissus       text[] not null default '{}';
 alter table public.produits add column if not exists sur_mesure   boolean not null default false;
 alter table public.produits add column if not exists tendance     boolean not null default false;
+
+-- Le tissu était d'abord un texte unique. Ce qui a été saisi ainsi
+-- rejoint la liste avant que la colonne ne disparaisse : une réécriture
+-- de modèle ne doit rien coûter à ce qui est déjà enregistré.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'produits'
+                and column_name = 'tissu') then
+    update public.produits
+       set tissus = array[btrim(tissu)]
+     where btrim(coalesce(tissu, '')) <> '' and cardinality(tissus) = 0;
+    alter table public.produits drop column tissu;
+  end if;
+end
+$$;
 
 
 -- ---------- 2. Le vocabulaire ----------
@@ -89,6 +107,10 @@ alter table public.produits drop constraint if exists produits_couleurs_check;
 alter table public.produits add constraint produits_couleurs_check
   check (public.liste_propre(couleurs, 20));
 
+alter table public.produits drop constraint if exists produits_tissus_check;
+alter table public.produits add constraint produits_tissus_check
+  check (public.liste_propre(tissus, 12));
+
 
 -- ---------- 3. Retrouver vite ce qui est de saison ----------
 --
@@ -108,5 +130,5 @@ select 'Colonnes de mode' as "Ce qui est attendu",
        case when (select count(*) from information_schema.columns
                    where table_schema = 'public' and table_name = 'produits'
                      and column_name in ('sexe', 'tranche_age', 'tailles',
-                                         'couleurs', 'tissu', 'sur_mesure', 'tendance')) = 7
+                                         'couleurs', 'tissus', 'sur_mesure', 'tendance')) = 7
             then 'OK' else 'MANQUE' end as "État";

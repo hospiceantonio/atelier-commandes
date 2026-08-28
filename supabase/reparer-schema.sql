@@ -117,7 +117,7 @@ with attendu(rang, quoi, present, fichier) as (
         (select count(*) from information_schema.columns
           where table_schema = 'public' and table_name = 'produits'
             and column_name in ('sexe', 'tranche_age', 'tailles', 'couleurs',
-                                'tissu', 'sur_mesure', 'tendance')) = 7,
+                                'tissus', 'sur_mesure', 'tendance')) = 7,
         'mode.sql')
 )
 select quoi as "Ce qui est attendu",

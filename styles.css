@@ -191,6 +191,59 @@ h1,h2,h3,h4{margin:0;line-height:1.25}
   background:conic-gradient(#dc2626,#facc15,#16a34a,#2563eb,#7c3aed,#dc2626);
 }
 
+/* Ajouter une valeur que la liste ne propose pas : une puce en pointillé,
+   qui se distingue d'un choix par son trait. */
+.puce-ajout{
+  background:transparent;color:var(--indigo-700);
+  box-shadow:inset 0 0 0 1.5px var(--indigo-100);
+  border:1px dashed var(--indigo-500);
+}
+/* Une liste de vingt puces fait une carte interminable. Repliée, elle
+   tient en trois rangées ; ce qui est choisi passe devant, donc reste
+   visible sans déplier. */
+.puces-repliees{max-height:126px;overflow:hidden;position:relative}
+.puces-repliees::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:36px;
+  background:linear-gradient(rgba(255,255,255,0),var(--blanc));
+  pointer-events:none;
+}
+.voir-plus{
+  margin-top:6px;padding:4px 0;border:0;background:none;
+  color:var(--indigo-700);font-size:13px;font-weight:700;
+}
+
+.ajout-libre{display:none;gap:8px;margin-top:8px}
+.ajout-libre.ouvert{display:flex}
+.ajout-libre input{flex:1;min-width:0}
+
+/* ---------- Bascules ----------
+   Un interrupteur se voit et se touche ; une case à cocher de 20 px se
+   rate. Le libellé entier est cliquable. */
+.bascule{
+  display:flex;align-items:center;gap:12px;
+  padding:12px;border-radius:var(--r-sm);
+  background:var(--indigo-50);
+}
+.bascule + .bascule{margin-top:8px}
+.bascule input{position:absolute;opacity:0;width:0;height:0}
+.bascule .piste{
+  position:relative;flex:none;width:46px;height:27px;border-radius:999px;
+  background:#CFD1E3;transition:background .18s ease;
+}
+.bascule .piste::after{
+  content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;
+  border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(20,22,54,.3);
+  transition:transform .18s ease;
+}
+.bascule input:checked + .piste{background:var(--indigo-700)}
+.bascule input:checked + .piste::after{transform:translateX(19px)}
+.bascule input:focus-visible + .piste{outline:2px solid var(--indigo-500);outline-offset:2px}
+.bascule .texte{flex:1;font-size:14px;font-weight:600}
+.bascule .texte small{display:block;margin-top:2px;font-size:12.5px;font-weight:400;color:var(--encre-douce)}
+
+/* Un mot d'explication sous le titre d'une carte. */
+.carte-aide{margin:-4px 0 12px;font-size:12.5px;color:var(--encre-douce);line-height:1.45}
+
 /* ---------- Badges ---------- */
 .badge{
   display:inline-flex;align-items:center;gap:5px;
@@ -312,6 +365,14 @@ h1,h2,h3,h4{margin:0;line-height:1.25}
   display:flex;align-items:center;justify-content:center;
 }
 .photo-suppr .ic{width:14px;height:14px;stroke-width:2.4}
+/* La première photo est celle que le public verra en vignette : autant
+   le dire sur l'image plutôt qu'en note sous la carte. */
+.photo-tag{
+  position:absolute;left:5px;bottom:5px;
+  padding:2px 7px;border-radius:999px;
+  background:rgba(20,22,54,.72);color:#fff;
+  font-size:10px;font-weight:700;letter-spacing:.03em;
+}
 .photo-ajout{
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
   aspect-ratio:1;border-radius:var(--r-sm);

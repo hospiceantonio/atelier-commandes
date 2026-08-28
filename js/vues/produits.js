@@ -8,6 +8,34 @@ const VueProduits = (() => {
   const e = Utils.echapper;
   const MAX_PHOTOS = 4;
 
+  /* ---------- Trois briques du formulaire ---------- */
+
+  /** Un interrupteur, avec sa raison d'être en dessous. Le libellé entier
+      est cliquable : sur un téléphone, viser une case de 20 px est une
+      épreuve. */
+  const bascule = (id, actif, titre, aide) =>
+    '<label class="bascule" for="' + id + '">' +
+      '<input type="checkbox" id="' + id + '"' + (actif ? " checked" : "") + ">" +
+      '<span class="piste"></span>' +
+      '<span class="texte">' + e(titre) + "<small>" + e(aide) + "</small></span>" +
+    "</label>";
+
+  /** Une puce de choix — un seul parmi plusieurs (sexe, âge). */
+  const choix = (attribut, valeur, nom, actif) =>
+    '<button type="button" class="puce' + (actif ? " actif" : "") + '" ' +
+      attribut + '="' + e(valeur) + '" aria-pressed="' + (actif ? "true" : "false") + '">' +
+      e(nom) + "</button>";
+
+  /** Le champ replié derrière « + Autre ». Les listes de couleurs et de
+      tissus ne peuvent pas être complètes : celle-ci s'ouvre à la
+      demande, plutôt que d'imposer une saisie libre à tout le monde. */
+  const champAjout = (quoi, place) =>
+    '<button type="button" class="voir-plus" data-plus="' + quoi + '" hidden></button>' +
+    '<div class="ajout-libre" data-ajout="' + quoi + '">' +
+      '<input type="text" autocomplete="off" autocapitalize="words" placeholder="' + e(place) + '">' +
+      '<button type="button" class="btn btn-clair btn-sm">Ajouter</button>' +
+    "</div>";
+
   /** Miniature de couverture recalculée depuis la première photo. */
   /* ---------- Liste des réalisations de l'atelier ---------- */
 
@@ -92,6 +120,14 @@ const VueProduits = (() => {
     const categories = Array.from(new Set(tous.map((p) => p.categorie).filter(Boolean)))
       .sort((a, b) => a.localeCompare(b, "fr"));
 
+    /* Ce que l'atelier a déjà employé rejoint les suggestions : une
+       matière ajoutée une fois n'est plus à retaper la fois suivante. */
+    const dejaVus = (champ, base) => {
+      const vus = new Set(base);
+      for (const p of tous) for (const v of (p[champ] || [])) vus.add(v);
+      return Array.from(vus);
+    };
+
     UI.entete({
       titre: produit ? "Modifier la réalisation" : "Nouvelle réalisation",
       sous: produit ? produit.nom : "Publiée dans la boutique publique",
@@ -101,86 +137,73 @@ const VueProduits = (() => {
     vue.innerHTML =
       '<form id="form-produit" novalidate>' +
         '<div class="carte">' +
-          '<div class="carte-titre">' + UI.icone("camera", "ic-sm") + "Photos (" + MAX_PHOTOS + " maximum)</div>" +
+          '<div class="carte-titre">' + UI.icone("camera", "ic-sm") + "Photos</div>" +
+          '<div class="carte-aide">Jusqu\'à ' + MAX_PHOTOS +
+            " photos. La première fait la vignette de la boutique.</div>" +
           '<div class="photos" id="zone-photos-produit"></div>' +
           '<input type="file" id="prod-photo" accept="image/*" capture="environment" multiple hidden>' +
-          '<div class="aide">La première photo sert de couverture dans la boutique.</div>' +
         "</div>" +
 
         '<div class="carte">' +
-          '<div class="carte-titre">' + UI.icone("crayon", "ic-sm") + "Détails</div>" +
+          '<div class="carte-titre">' + UI.icone("crayon", "ic-sm") + "L'essentiel</div>" +
           '<div class="champ"><label for="prod-nom">Nom de la réalisation <span class="obligatoire">*</span></label>' +
             '<input id="prod-nom" autocomplete="off" autocapitalize="sentences" value="' + e(produit ? produit.nom : "") + '"></div>' +
-          '<div class="champ-duo">' +
-            '<div class="champ"><label for="prod-code">Code</label>' +
-              '<input id="prod-code" autocomplete="off" placeholder="ex. RB-001" value="' + e(produit ? produit.code : "") + '"></div>' +
-            '<div class="champ"><label for="prod-categorie">Catégorie</label>' +
-              '<input id="prod-categorie" autocomplete="off" list="prod-categories" placeholder="ex. Robes" value="' +
-                e(produit ? produit.categorie : "") + '">' +
-              '<datalist id="prod-categories">' +
-                categories.map((c) => '<option value="' + e(c) + '">').join("") +
-              "</datalist></div>" +
-          "</div>" +
+          '<div class="champ"><label for="prod-code">Code</label>' +
+            '<input id="prod-code" autocomplete="off" placeholder="ex. RB-001" value="' +
+              e(produit ? produit.code : "") + '"></div>' +
+          '<div class="champ"><label>Catégorie</label>' +
+            '<div class="puces puces-grille" id="prod-categorie"></div>' +
+            champAjout("categorie", "Nom de la catégorie") + "</div>" +
           UI.champMontant({ id: "prod-prix", label: "Prix", valeur: produit ? produit.prix : "", obligatoire: true }) +
-          '<label class="interrupteur" style="display:flex">' +
-            '<input type="checkbox" id="prod-prix-visible"' +
-              (!produit || produit.prix_visible ? " checked" : "") + ">" +
-            "<span>Afficher le prix dans la boutique publique (sinon : « Prix sur demande »)</span>" +
-          "</label>" +
-          '<label class="interrupteur" style="display:flex">' +
-            '<input type="checkbox" id="prod-avant"' + (produit && produit.en_avant ? " checked" : "") + ">" +
-            "<span>Mettre en avant : la réalisation ouvre l'accueil de la boutique, " +
-              "dans le carrousel <strong>À la une</strong></span>" +
-          "</label>" +
-          '<div class="champ" style="margin-top:14px"><label for="prod-stock">Stock disponible</label>' +
+          bascule("prod-prix-visible", !produit || produit.prix_visible,
+            "Afficher le prix", "Sinon la boutique affiche « Prix sur demande »") +
+        "</div>" +
+
+        /* ---------- Mode ----------
+           Pour qui d'abord : ces deux réponses commandent la grille de
+           tailles juste en dessous. */
+        '<div class="carte">' +
+          '<div class="carte-titre">' + UI.icone("etiquette", "ic-sm") + "Mode</div>" +
+          '<div class="carte-aide">Ce qu\'un client demande avant d\'écrire. ' +
+            "Tout est facultatif — ce qui reste vide ne s'affiche pas.</div>" +
+
+          '<div class="champ"><label>Pour qui</label>' +
+            '<div class="puces puces-grille" id="prod-sexe">' +
+              Mode.SEXES.map((s) => choix("data-sexe", s.code, s.nom,
+                (produit ? produit.sexe : "") === s.code)).join("") +
+            "</div></div>" +
+
+          '<div class="champ"><label>Tranche d\'âge</label>' +
+            '<div class="puces puces-grille" id="prod-age">' +
+              Mode.AGES.map((a) => choix("data-age", a.code, a.nom,
+                (produit ? produit.tranche_age : "") === a.code)).join("") +
+            "</div></div>" +
+
+          '<div class="champ"><label>Tailles disponibles</label>' +
+            '<div class="carte-aide">Norme européenne. La grille suit vos deux réponses ' +
+              "ci-dessus ; pour les enfants, l'âge est suivi de la stature en centimètres.</div>" +
+            '<div id="prod-tailles"></div></div>' +
+
+          '<div class="champ"><label>Couleurs</label>' +
+            '<div class="puces puces-grille" id="prod-couleurs"></div>' +
+            champAjout("couleur", "Nom de la couleur") + "</div>" +
+
+          '<div class="champ"><label>Tissus</label>' +
+            '<div class="puces puces-grille" id="prod-tissus"></div>' +
+            champAjout("tissu", "Nom du tissu") + "</div>" +
+        "</div>" +
+
+        '<div class="carte">' +
+          '<div class="carte-titre">' + UI.icone("boutique", "ic-sm") + "Vente</div>" +
+          bascule("prod-sur-mesure", !!(produit && produit.sur_mesure),
+            "Sur mesure", "Le modèle est confectionné aux mesures du client") +
+          bascule("prod-tendance", !!(produit && produit.tendance),
+            "Tendance", "Un badge le signale dans la boutique") +
+          '<div class="champ" style="margin:14px 0 0"><label for="prod-stock">Stock disponible</label>' +
             '<input id="prod-stock" inputmode="numeric" autocomplete="off" value="' +
               e(String(produit ? produit.stock : 0)) + '">' +
             '<div class="aide">Visible de vous seul. Chaque facture émise depuis « Nouvelle vente » ' +
               "retire automatiquement les articles vendus.</div></div>" +
-        "</div>" +
-
-        /* ---------- Mode ----------
-           Sexe et tranche d'âge d'abord : ce sont eux qui commandent la
-           grille de tailles juste en dessous. */
-        '<div class="carte">' +
-          '<div class="carte-titre">' + UI.icone("etiquette", "ic-sm") + "Mode</div>" +
-          '<div class="champ-duo">' +
-            '<div class="champ"><label for="prod-sexe">Pour qui</label>' +
-              '<select id="prod-sexe">' +
-                Mode.SEXES.map((s) => '<option value="' + e(s.code) + '"' +
-                  (produit && produit.sexe === s.code ? " selected" : "") + ">" + e(s.nom) + "</option>").join("") +
-              "</select></div>" +
-            '<div class="champ"><label for="prod-age">Tranche d\'âge</label>' +
-              '<select id="prod-age">' +
-                Mode.AGES.map((a) => '<option value="' + e(a.code) + '"' +
-                  (produit && produit.tranche_age === a.code ? " selected" : "") + ">" + e(a.nom) + "</option>").join("") +
-              "</select></div>" +
-          "</div>" +
-
-          '<div class="champ"><label>Tailles disponibles</label>' +
-            '<div id="prod-tailles"></div>' +
-            '<div class="aide">Norme européenne. La grille suit le sexe et l\'âge choisis ; ' +
-              "pour les enfants, l'âge est suivi de la stature en centimètres.</div></div>" +
-
-          '<div class="champ"><label>Couleurs</label>' +
-            '<div class="puces puces-grille" id="prod-couleurs"></div></div>' +
-
-          '<div class="champ"><label for="prod-tissu">Type de tissu</label>' +
-            '<input id="prod-tissu" autocomplete="off" list="prod-tissus" placeholder="ex. Wax (pagne)" value="' +
-              e(produit ? (produit.tissu || "") : "") + '">' +
-            '<datalist id="prod-tissus">' +
-              Mode.TISSUS.map((t) => '<option value="' + e(t) + '">').join("") +
-            "</datalist>" +
-            '<div class="aide">Choisissez dans la liste ou écrivez le vôtre.</div></div>' +
-
-          '<label class="interrupteur" style="display:flex">' +
-            '<input type="checkbox" id="prod-sur-mesure"' + (produit && produit.sur_mesure ? " checked" : "") + ">" +
-            "<span><strong>Sur mesure</strong> — le modèle est confectionné aux mesures du client</span>" +
-          "</label>" +
-          '<label class="interrupteur" style="display:flex">' +
-            '<input type="checkbox" id="prod-tendance"' + (produit && produit.tendance ? " checked" : "") + ">" +
-            "<span><strong>Tendance</strong> — un badge le signale dans la boutique</span>" +
-          "</label>" +
         "</div>" +
 
         '<button type="submit" class="btn btn-bloc" id="prod-enregistrer">' +
@@ -198,7 +221,8 @@ const VueProduits = (() => {
         photos.map((p, i) =>
           '<span class="photo"><img src="' + p.apercu + '" alt="Photo ' + (i + 1) + '">' +
             '<button type="button" class="photo-suppr" data-retire="' + i + '" aria-label="Retirer la photo">' +
-            UI.icone("fermer", "ic-sm") + "</button></span>"
+            UI.icone("fermer", "ic-sm") + "</button>" +
+            (i === 0 ? '<span class="photo-tag">Couverture</span>' : "") + "</span>"
         ).join("") +
         (photos.length < MAX_PHOTOS
           ? '<button type="button" class="photo-ajout" id="ajout-photo-produit">' + UI.icone("camera") +
@@ -231,19 +255,51 @@ const VueProduits = (() => {
       afficherPhotos();
     });
 
-    /* ---------- Tailles et couleurs ----------
-       Deux listes qu'on coche. Les tailles proposées dépendent du sexe et
-       de l'âge : changer l'un des deux redessine la grille. */
+    /* ---------- Mode : ce qui se choisit à la puce ----------
+       Tout se touche du doigt. Les menus déroulants ont disparu : sur
+       Android, la liste de suggestions d'un champ de saisie ne s'ouvre
+       pas dans la WebView — le champ « tissu » y était muet. */
+    let categorie = (produit && produit.categorie) || "";
+    let sexe = (produit && produit.sexe) || "";
+    let age = (produit && produit.tranche_age) || "";
     let tailles = (produit && produit.tailles) ? produit.tailles.slice() : [];
     let couleurs = (produit && produit.couleurs) ? produit.couleurs.slice() : [];
+    let tissus = (produit && produit.tissus) ? produit.tissus.slice() : [];
 
     const puce = (valeur, choisi, attribut, dedans) =>
       '<button type="button" class="puce' + (choisi ? " actif" : "") + '" ' +
         attribut + '="' + e(valeur) + '" aria-pressed="' + (choisi ? "true" : "false") + '">' +
         dedans + "</button>";
 
+    /* La puce qui ouvre le champ libre, en queue de liste. */
+    const puceAjout = (quoi) =>
+      '<button type="button" class="puce puce-ajout" data-ouvrir="' + quoi + '">+ Autre</button>';
+
+    /* Ce qui est retenu passe devant. Le tri est stable : à l'intérieur
+       de chaque moitié, l'ordre d'origine tient. Replié, on voit donc
+       toujours ses propres choix. */
+    const devant = (liste, retenu) =>
+      liste.slice().sort((a, b) => (retenu(b) ? 1 : 0) - (retenu(a) ? 1 : 0));
+
+    /* Au-delà de cette longueur, la liste se replie derrière un bouton :
+       vingt puces déroulées font une carte qu'on ne finit pas de faire
+       défiler. */
+    const SEUIL_REPLI = 12;
+    const deplie = {};
+    function majRepli(quoi) {
+      const zone = UI.$('[data-plus="' + quoi + '"]').previousElementSibling;
+      const bouton = UI.$('[data-plus="' + quoi + '"]');
+      /* « + Autre » ne compte pas : c'est une commande, pas un choix.
+         Sans cette nuance, une liste de douze replie treize puces. */
+      const total = zone.querySelectorAll(".puce:not(.puce-ajout)").length;
+      const aReplier = total > SEUIL_REPLI && !deplie[quoi];
+      zone.classList.toggle("puces-repliees", aReplier);
+      bouton.hidden = total <= SEUIL_REPLI;
+      bouton.textContent = aReplier ? "Tout afficher" : "Replier";
+    }
+
     function rendreTailles() {
-      const groupes = Mode.grilles(UI.$("#prod-sexe").value, UI.$("#prod-age").value);
+      const groupes = Mode.grilles(sexe, age);
       /* Changer de grille ne doit pas effacer en douce ce qui était déjà
          coché : ce qui n'entre dans aucun groupe reste montré à part. */
       const connues = new Set();
@@ -260,16 +316,28 @@ const VueProduits = (() => {
         : '<div class="aide">Choisissez la tranche d\'âge : la grille des tailles s\'y adapte.</div>';
     }
 
+    /* Ce qui est proposé : la liste de départ, plus tout ce que l'atelier
+       a déjà employé ailleurs, plus ce que cette fiche porte déjà. */
     function rendreCouleurs() {
-      const connues = Mode.COULEURS.map((c) => c.nom);
-      const toutes = connues.concat(couleurs.filter((c) => connues.indexOf(c) < 0));
-      UI.$("#prod-couleurs").innerHTML = toutes.map((nom) => {
-        const ton = Mode.tonDe(nom);
-        const pastille = '<span class="pastille-ton' + (ton ? "" : " multi") + '"' +
-          (ton ? ' style="background:' + e(ton) + '"' : "") + "></span>";
-        return puce(nom, couleurs.indexOf(nom) >= 0, "data-couleur",
-          pastille + "<span>" + e(nom) + "</span>");
-      }).join("");
+      const toutes = new Set(dejaVus("couleurs", Mode.COULEURS.map((c) => c.nom)).concat(couleurs));
+      UI.$("#prod-couleurs").innerHTML =
+        devant(Array.from(toutes), (n) => couleurs.indexOf(n) >= 0).map((nom) => {
+          const ton = Mode.tonDe(nom);
+          const pastille = '<span class="pastille-ton' + (ton ? "" : " multi") + '"' +
+            (ton ? ' style="background:' + e(ton) + '"' : "") + "></span>";
+          return puce(nom, couleurs.indexOf(nom) >= 0, "data-couleur",
+            pastille + "<span>" + e(nom) + "</span>");
+        }).join("") + puceAjout("couleur");
+      majRepli("couleur");
+    }
+
+    function rendreTissus() {
+      const toutes = new Set(dejaVus("tissus", Mode.TISSUS).concat(tissus));
+      UI.$("#prod-tissus").innerHTML =
+        devant(Array.from(toutes), (n) => tissus.indexOf(n) >= 0).map((nom) =>
+          puce(nom, tissus.indexOf(nom) >= 0, "data-tissu", e(nom))).join("") +
+        puceAjout("tissu");
+      majRepli("tissu");
     }
 
     function basculer(liste, valeur) {
@@ -277,22 +345,101 @@ const VueProduits = (() => {
       if (i >= 0) liste.splice(i, 1); else liste.push(valeur);
     }
 
+    /* La catégorie se choisit aussi à la puce : c'était le second champ à
+       liste de suggestions, muet lui aussi dans la WebView d'Android. Un
+       seul rayon par réalisation — mais la liste s'ouvre. */
+    function rendreCategorie() {
+      const toutes = new Set(Mode.CATEGORIES.concat(categories).concat(categorie ? [categorie] : []));
+      UI.$("#prod-categorie").innerHTML =
+        devant(Array.from(toutes), (n) => n === categorie).map((nom) =>
+          puce(nom, categorie === nom, "data-categorie", e(nom))).join("") +
+        puceAjout("categorie");
+      majRepli("categorie");
+    }
+
+    rendreCategorie();
     rendreTailles();
     rendreCouleurs();
-    UI.$("#prod-sexe").addEventListener("change", rendreTailles);
-    UI.$("#prod-age").addEventListener("change", rendreTailles);
+    rendreTissus();
+
+    /* Choix unique : la puce touchée devient la seule active. Se dédire
+       ne demande pas de geste particulier — « Non précisé » est une puce
+       comme les autres. */
+    const choisirUnique = (zone, attribut, poser) => {
+      UI.$(zone).addEventListener("click", (ev) => {
+        const b = ev.target.closest("[" + attribut + "]");
+        if (!b) return;
+        poser(b.getAttribute(attribut));
+        for (const autre of UI.$$(zone + " [" + attribut + "]")) {
+          autre.classList.toggle("actif", autre === b);
+          autre.setAttribute("aria-pressed", autre === b ? "true" : "false");
+        }
+        rendreTailles();
+      });
+    };
+    choisirUnique("#prod-sexe", "data-sexe", (v) => { sexe = v; });
+    choisirUnique("#prod-age", "data-age", (v) => { age = v; });
+
     UI.$("#prod-tailles").addEventListener("click", (ev) => {
       const b = ev.target.closest("[data-taille]");
       if (!b) return;
       basculer(tailles, b.dataset.taille);
       rendreTailles();
     });
-    UI.$("#prod-couleurs").addEventListener("click", (ev) => {
-      const b = ev.target.closest("[data-couleur]");
-      if (!b) return;
-      basculer(couleurs, b.dataset.couleur);
-      rendreCouleurs();
-    });
+
+    /* Les trois listes ouvertes fonctionnent pareil : toucher une puce,
+       ou ouvrir le champ libre pour ajouter ce que la liste ignore.
+       « appliquer » dit ce que vaut un choix — une de plus pour les
+       couleurs et les tissus, la seule pour la catégorie. */
+    const listeOuverte = (zone, attribut, quoi, appliquer, rendre) => {
+      const bloc = UI.$('[data-ajout="' + quoi + '"]');
+      const saisie = UI.$("input", bloc);
+      const ajouter = () => {
+        const valeur = saisie.value.trim();
+        if (!valeur) return;
+        appliquer(valeur, true);
+        saisie.value = "";
+        bloc.classList.remove("ouvert");
+        rendre();
+      };
+      UI.$(zone).addEventListener("click", (ev) => {
+        if (ev.target.closest("[data-ouvrir]")) {
+          bloc.classList.add("ouvert");
+          saisie.focus();
+          return;
+        }
+        const b = ev.target.closest("[" + attribut + "]");
+        if (!b) return;
+        appliquer(b.getAttribute(attribut), false);
+        rendre();
+      });
+      UI.$('[data-plus="' + quoi + '"]').onclick = () => {
+        deplie[quoi] = !deplie[quoi];
+        majRepli(quoi);
+      };
+      UI.$("button", bloc).onclick = ajouter;
+      saisie.addEventListener("keydown", (ev) => {
+        /* Entrée ajoute la valeur — et n'envoie surtout pas le
+           formulaire, qui serait alors publié à moitié rempli. */
+        if (ev.key !== "Enter") return;
+        ev.preventDefault();
+        ajouter();
+      });
+    };
+
+    /* Une valeur ajoutée à la main est retenue d'office : on ne la tape
+       pas pour ensuite devoir la cocher. */
+    const dansLaListe = (liste) => (valeur, ajoutee) => {
+      if (ajoutee) { if (liste.indexOf(valeur) < 0) liste.push(valeur); }
+      else basculer(liste, valeur);
+    };
+
+    listeOuverte("#prod-categorie", "data-categorie", "categorie",
+      (valeur) => { categorie = valeur; }, rendreCategorie);
+    listeOuverte("#prod-couleurs", "data-couleur", "couleur",
+      dansLaListe(couleurs), rendreCouleurs);
+    listeOuverte("#prod-tissus", "data-tissu", "tissu",
+      dansLaListe(tissus), rendreTissus);
 
     /* Enregistrement */
     UI.$("#form-produit").addEventListener("submit", async (ev) => {
@@ -336,15 +483,14 @@ const VueProduits = (() => {
         const valeurs = {
           nom,
           code: UI.$("#prod-code").value.trim(),
-          categorie: UI.$("#prod-categorie").value.trim() || "Autres",
+          categorie: categorie || "Autres",
           prix,
           prix_visible: UI.$("#prod-prix-visible").checked,
-          en_avant: UI.$("#prod-avant").checked,
-          sexe: UI.$("#prod-sexe").value,
-          tranche_age: UI.$("#prod-age").value,
+          sexe: sexe,
+          tranche_age: age,
           tailles: tailles.slice(),
           couleurs: couleurs.slice(),
-          tissu: UI.$("#prod-tissu").value.trim(),
+          tissus: tissus.slice(),
           sur_mesure: UI.$("#prod-sur-mesure").checked,
           tendance: UI.$("#prod-tendance").checked,
           couverture,

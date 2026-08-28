@@ -423,8 +423,9 @@ const VueBoutique = (() => {
                     e(c) + "</span>";
                 }).join(" ") + "</span></div>"
             : "") +
-          (p.tissu
-            ? '<div class="paire"><span class="l">Tissu</span><span class="v">' + e(p.tissu) + "</span></div>"
+          (p.tissus && p.tissus.length
+            ? '<div class="paire"><span class="l">Tissu' + (p.tissus.length > 1 ? "s" : "") +
+                '</span><span class="v">' + e(p.tissus.join(", ")) + "</span></div>"
             : "") +
           (p.sur_mesure
             ? '<div class="paire"><span class="l">Confection</span><span class="v">' +
