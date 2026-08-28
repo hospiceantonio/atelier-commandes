@@ -27,8 +27,10 @@ const VueStats = (() => {
         '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 0">' +
           '<p style="margin:0;flex:1;font-size:12.5px;color:var(--encre-tres-douce)">' +
             e(UI.libellePeriode(periode.actif, b)) + "</p>" +
-          '<button type="button" class="btn btn-clair btn-sm" id="btn-point">' +
-            UI.icone("telecharger", "ic-sm") + "Récap A4</button>" +
+          (Api.aDroit("recettes_recap")
+            ? '<button type="button" class="btn btn-clair btn-sm" id="btn-point">' +
+                UI.icone("telecharger", "ic-sm") + "Récap A4</button>"
+            : "") +
         "</div>" +
 
         '<div class="tuiles">' +
@@ -66,7 +68,9 @@ const VueStats = (() => {
       /* Dépenses de la période */
       html +=
         '<div class="section-titre">' + UI.icone("telecharger", "ic-sm") + "Dépenses (" + stats.depenses.length + ")" +
-          '<a class="lien" id="ajouter-depense" style="cursor:pointer">+ Dépense</a></div>';
+          (Api.aDroit("depense_ajouter")
+            ? '<a class="lien" id="ajouter-depense" style="cursor:pointer">+ Dépense</a>'
+            : "") + "</div>";
       if (stats.depenses.length) {
         html += '<div class="carte"><div class="mini-liste">' +
           stats.depenses.map((d) =>
@@ -120,7 +124,8 @@ const VueStats = (() => {
       UI.$("#zone-stats").innerHTML = html;
 
       /* Ajout d'une dépense */
-      UI.$("#btn-point").onclick = () => {
+      const boutonPoint = UI.$("#btn-point");
+      if (boutonPoint) boutonPoint.onclick = () => {
         UI.choisirImpression("Récapitulatif — " + UI.libellePeriode(periode.actif, b),
           () => Store.imprimerRapport(stats, b, UI.libellePeriode(periode.actif, b)));
       };
@@ -135,7 +140,8 @@ const VueStats = (() => {
         };
       }
 
-      UI.$("#ajouter-depense").onclick = () => {
+      const boutonDepense = UI.$("#ajouter-depense");
+      if (boutonDepense) boutonDepense.onclick = () => {
         const corps = UI.ouvrirFeuille("Nouvelle dépense",
           '<div class="carte">' +
             '<div class="champ"><label for="dep-libelle">Libellé <span class="obligatoire">*</span></label>' +

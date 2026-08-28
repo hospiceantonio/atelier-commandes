@@ -70,8 +70,51 @@ const Api = (() => {
   const lireAtelier = () => atelier;
   const atelierId = () => (profil ? profil.atelier_id : null);
   const lireParametres = () => parametres;
-  /** Administrateur de l'atelier : lui seul modifie et supprime. */
+  /** Administrateur de l'atelier : lui seul touche aux réglages. */
   const estAdmin = () => !!profil && profil.role === "admin";
+
+  /* ---------- Droits d'un modérateur ----------
+     Réglés un par un par l'administrateur (voir supabase/droits.sql).
+     Le serveur applique les mêmes règles : ceci n'est que le confort de
+     navigation — masquer un bouton n'a jamais fermé une porte. */
+
+  /* Ce qu'un modérateur pouvait faire avant que les droits existent.
+     Sert de repli quand la colonne n'est pas encore en base. */
+  const DROITS_HISTORIQUES = {
+    commande_creer: true, vente_creer: true, commande_recap: true,
+  };
+
+  const DROITS = [
+    { cle: "commande_creer", libelle: "Créer une commande" },
+    { cle: "commande_modifier", libelle: "Modifier une commande",
+      aide: "Inclut le changement de statut et les encaissements." },
+    { cle: "commande_supprimer", libelle: "Supprimer une commande" },
+    { cle: "commande_recap", libelle: "Envoyer le récapitulatif WhatsApp" },
+    { cle: "vente_creer", libelle: "Établir une facture" },
+    { cle: "vente_supprimer", libelle: "Annuler une facture",
+      aide: "Les articles retournent en stock." },
+    { cle: "recettes_voir", libelle: "Consulter les recettes",
+      aide: "Ouvre l'onglet Recettes et la lecture des dépenses." },
+    { cle: "depense_ajouter", libelle: "Ajouter une dépense" },
+    { cle: "recettes_recap", libelle: "Imprimer le Récap A4",
+      aide: "Demande aussi « Consulter les recettes »." },
+  ];
+
+  function aDroit(cle) {
+    if (!profil) return false;
+    if (profil.role === "admin" || profil.role === "superadmin") return true;
+    if (profil.role !== "moderateur") return false;
+    const d = profil.droits || DROITS_HISTORIQUES;
+    return d[cle] === true;
+  }
+
+  /** Droits d'un membre de l'équipe, complétés des clés absentes. */
+  function lireDroits(membre) {
+    const source = (membre && membre.droits) || DROITS_HISTORIQUES;
+    const complet = {};
+    for (const d of DROITS) complet[d.cle] = source[d.cle] === true;
+    return complet;
+  }
 
   async function majParametres(objet) {
     parametres = await mettreAJour("parametres", 1, { ...objet, modifie_le: new Date().toISOString() });
@@ -352,7 +395,7 @@ const Api = (() => {
   return {
     configOk, bibliothequeOk, init, chargerContexte,
     connecte, role, lireProfil, lireAtelier, atelierId, rafraichirAtelier,
-    lireParametres, majParametres, estAdmin,
+    lireParametres, majParametres, estAdmin, aDroit, lireDroits, DROITS,
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
     creerCompte, creerCompteAdmin, rattacherProfil, deconnexion,
     listerFormules, creerMonAtelier, formuleCourante, aModuleAtelier, aModuleVitrine,

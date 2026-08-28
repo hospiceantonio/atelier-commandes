@@ -43,8 +43,9 @@
     { motif: /^\/banniere\/([^/]+)$/, vue: (v, m) => VueSuperAdmin.formulaireBanniere(v, m[1]) },
   ];
 
-  /* Modérateur : il enregistre commandes et ventes, consulte les listes,
-     mais ne modifie rien et n'accède ni aux réglages ni aux recettes.
+  /* Modérateur : ce qu'il peut faire dépend des droits que son
+     administrateur lui a cochés (voir supabase/droits.sql). Les réglages
+     et l'équipe lui restent fermés en toutes circonstances.
      Le serveur applique les mêmes limites (RLS) : ce routage n'est que
      le confort de navigation. */
   const ROUTES_MODERATEUR = [
@@ -55,11 +56,12 @@
     { motif: /^\/client\/([^/]+)\/modifier$/, vue: (v, m) => VueClients.formulaire(v, m[1]), module: "atelier" },
     { motif: /^\/client\/([^/]+)$/, vue: (v, m) => VueClients.fiche(v, m[1]), module: "atelier" },
     { motif: /^\/commandes$/, vue: (v) => VueCommandes.liste(v), onglet: "/commandes", module: "atelier" },
-    { motif: /^\/commande\/nouvelle$/, vue: (v, m, p) => VueCommandes.nouvelle(v, p), module: "atelier" },
+    { motif: /^\/commande\/nouvelle$/, vue: (v, m, p) => VueCommandes.nouvelle(v, p), module: "atelier", droit: "commande_creer" },
     { motif: /^\/commande\/([^/]+)$/, vue: (v, m) => VueCommandes.detail(v, m[1]), module: "atelier" },
+    { motif: /^\/statistiques$/, vue: (v) => VueStats.afficher(v), onglet: "/statistiques", droit: "recettes_voir" },
     { motif: /^\/nouveau$/, vue: () => { location.hash = "#/"; menuNouveau(); } },
     { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v), onglet: "/ventes", module: "vitrine" },
-    { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v), module: "vitrine" },
+    { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v), module: "vitrine", droit: "vente_creer" },
     { motif: /^\/vente\/([^/]+)$/, vue: (v, m) => VueVentes.detail(v, m[1]), module: "vitrine" },
   ];
 
@@ -86,7 +88,10 @@
     !module ||
     (module === "atelier" ? Api.aModuleAtelier() : Api.aModuleVitrine());
 
-  const filtrerParFormule = (liste) => liste.filter((x) => ouvert(x.module));
+  /* Deux filtres en un : la formule de l'atelier, et les droits du compte.
+     Un écran s'affiche si la formule le porte ET si le compte y a droit. */
+  const filtrerParFormule = (liste) =>
+    liste.filter((x) => ouvert(x.module) && (!x.droit || Api.aDroit(x.droit)));
 
   /* Onglets selon le contexte. Le superadmin n'en a pas (tabbar cachée). */
   const ONGLETS_PUBLICS = [
@@ -101,6 +106,8 @@
     { href: "#/nouveau", cta: true, label: "Nouveau" },
     { href: "#/ventes", tab: "/ventes", icone: "argent", label: "Ventes", module: "vitrine" },
     { href: "#/clients", tab: "/clients", icone: "clients", label: "Clients", module: "atelier" },
+    { href: "#/statistiques", tab: "/statistiques", icone: "stats", label: "Recettes",
+      droit: "recettes_voir" },
   ];
 
   const ONGLETS_ADMIN = [
@@ -273,7 +280,11 @@
       }
       /* Les onglets dépendent de la formule : la clé de cache la porte,
          sinon un changement de formule laisserait les anciens onglets. */
-      const cle = (moderateur ? "moderateur" : "admin") + ":" + Api.formuleCourante();
+      /* La clé porte le rôle, la formule ET les droits : sans eux, un
+         modérateur dont l'administrateur vient de changer les droits
+         garderait ses anciens onglets. */
+      const cle = (moderateur ? "moderateur" : "admin") + ":" + Api.formuleCourante() +
+        ":" + Api.DROITS.map((d) => (Api.aDroit(d.cle) ? "1" : "0")).join("");
       rendreTabbar(filtrerParFormule(moderateur ? ONGLETS_MODERATEUR : ONGLETS_ADMIN), cle);
 
       if (abonnementExpire()) {
@@ -335,13 +346,15 @@
       "</button>";
 
     const choix = [];
-    if (Api.aModuleAtelier()) {
+    if (Api.aModuleAtelier() && Api.aDroit("commande_creer")) {
       choix.push(["#/commande/nouvelle", "commandes", "Nouvelle commande",
         "Vêtement sur mesure pour un client"]);
     }
     if (Api.aModuleVitrine()) {
-      choix.push(["#/vente-nouvelle", "argent", "Nouvelle vente",
-        "Facture sur les articles en stock"]);
+      if (Api.aDroit("vente_creer")) {
+        choix.push(["#/vente-nouvelle", "argent", "Nouvelle vente",
+          "Facture sur les articles en stock"]);
+      }
       choix.push(["#/ventes", "stats", "Mes ventes", "Historique des factures"]);
     }
     const corps = UI.ouvrirFeuille("Que voulez-vous créer ?",

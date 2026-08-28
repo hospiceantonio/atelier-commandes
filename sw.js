@@ -3,7 +3,7 @@
    hors ligne une fois installée sur le téléphone.
    Incrémenter VERSION à chaque mise à jour des fichiers.
    ========================================================= */
-const VERSION = "atelier-v38";
+const VERSION = "atelier-v39";
 
 const FICHIERS = [
   "./",

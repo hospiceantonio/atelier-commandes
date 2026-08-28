@@ -25,7 +25,9 @@ const VueCommandes = (() => {
     UI.entete({
       titre: "Commandes",
       sous: commandes.length + " au total",
-      actions: '<a class="btn-ic" href="#/commande/nouvelle" aria-label="Nouvelle commande">' + UI.icone("plus") + "</a>",
+      actions: Api.aDroit("commande_creer")
+        ? '<a class="btn-ic" href="#/commande/nouvelle" aria-label="Nouvelle commande">' + UI.icone("plus") + "</a>"
+        : "",
     });
 
     const compte = (idFiltre) => appliquer(commandes, idFiltre, "").length;
@@ -72,8 +74,13 @@ const VueCommandes = (() => {
         zone.innerHTML = UI.vide(
           "commandes",
           terme ? "Aucune commande trouvée" : "Aucune commande ici",
-          terme ? "Essayez un autre mot." : "Le bouton + crée une commande en quelques secondes.",
-          terme ? "" : '<a class="btn" href="#/commande/nouvelle">' + UI.icone("plus", "ic-sm") + "Nouvelle commande</a>"
+          terme ? "Essayez un autre mot."
+                : (Api.aDroit("commande_creer")
+                    ? "Le bouton + crée une commande en quelques secondes."
+                    : "Vous n'avez pas le droit de créer une commande."),
+          terme || !Api.aDroit("commande_creer")
+            ? ""
+            : '<a class="btn" href="#/commande/nouvelle">' + UI.icone("plus", "ic-sm") + "Nouvelle commande</a>"
         );
         return;
       }
@@ -406,7 +413,7 @@ const VueCommandes = (() => {
       titre: commande.numero,
       sous: "Créée le " + Utils.fmtDateHeure(commande.creeLe),
       retour: true,
-      actions: Api.estAdmin()
+      actions: Api.aDroit("commande_modifier")
         ? '<a class="btn-ic" href="#/commande/' + id + '/modifier" aria-label="Modifier">' + UI.icone("crayon") + "</a>"
         : "",
     });
@@ -474,7 +481,7 @@ const VueCommandes = (() => {
     html +=
       '<div class="carte">' +
         '<div class="carte-titre">' + UI.icone("argent", "ic-sm") + "Paiement" +
-          (solde > 0 && Api.estAdmin()
+          (solde > 0 && Api.aDroit("commande_modifier")
             ? '<a class="lien" id="ouvrir-paiement" style="cursor:pointer">+ Encaisser</a>' : "") +
         "</div>" +
         '<div class="paires">' +
@@ -493,7 +500,7 @@ const VueCommandes = (() => {
                 '<div class="mini">' +
                   '<span class="l">' + e(p.note || "Versement") + " · " + Utils.fmtDateHeure(p.date) + "</span>" +
                   '<span class="v">' + Utils.fmtMontant(p.montant, r.devise) + "</span>" +
-                  (Api.estAdmin()
+                  (Api.aDroit("commande_modifier")
                     ? '<button type="button" class="btn-ic" style="width:30px;height:30px;background:var(--rouge-clair);color:var(--rouge)" data-suppr-paiement="' + p.id + '" aria-label="Annuler ce versement">' +
                       UI.icone("poubelle", "ic-sm") + "</button>"
                     : "") +
@@ -507,7 +514,7 @@ const VueCommandes = (() => {
     html +=
       '<div class="carte">' +
         '<div class="carte-titre">' + UI.icone("check", "ic-sm") + "Statut</div>" +
-        (Api.estAdmin()
+        (Api.aDroit("commande_modifier")
           ? '<div class="btn-rangee">' +
               Object.entries(Store.STATUTS).map(([code, s]) =>
                 '<button type="button" class="btn btn-sm ' + (commande.statut === code ? "" : "btn-clair") + '" data-statut="' + code + '">' +
@@ -526,14 +533,17 @@ const VueCommandes = (() => {
         '<div class="carte">' +
           '<div class="carte-titre">' + UI.icone("whatsapp", "ic-sm") + "Message WhatsApp</div>" +
           '<div class="btn-rangee">' +
-            '<button type="button" class="btn btn-wa" id="wa-recap">' + UI.icone("whatsapp", "ic-sm") + "Récapitulatif</button>" +
+            (Api.aDroit("commande_recap")
+              ? '<button type="button" class="btn btn-wa" id="wa-recap">' +
+                  UI.icone("whatsapp", "ic-sm") + "Récapitulatif</button>"
+              : "") +
             '<button type="button" class="btn btn-wa" id="wa-pret">' + UI.icone("whatsapp", "ic-sm") + "Commande prête</button>" +
           "</div>" +
           "<div class=\"aide\" style=\"margin-top:8px\">Le message s'ouvre dans WhatsApp : vous pouvez le relire avant l'envoi.</div>" +
         "</div>";
     }
 
-    if (Api.estAdmin()) {
+    if (Api.aDroit("commande_supprimer")) {
       html +=
         '<div style="margin-top:6px"><button type="button" class="btn btn-danger btn-bloc" id="suppr-cmd">' +
           UI.icone("poubelle", "ic-sm") + "Supprimer la commande</button></div>";

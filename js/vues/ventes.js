@@ -214,11 +214,11 @@ const VueVentes = (() => {
           UI.icone("telecharger", "ic-sm") + "Facture A4</button>" +
       "</div>" +
 
-      (Api.role() === "admin"
+      (Api.aDroit("vente_supprimer")
         ? '<button type="button" class="btn btn-danger btn-bloc" id="vte-annuler" style="margin-top:12px">' +
             UI.icone("poubelle", "ic-sm") + "Annuler cette vente</button>" +
           '<p class="pied-note">Annuler une vente remet les articles en stock.</p>'
-        : '<p class="pied-note">Seul l\'administrateur de l\'atelier peut annuler une vente.</p>');
+        : '<p class="pied-note">Vous n\'avez pas le droit d\'annuler une facture.</p>');
 
     UI.$("#vte-imprimer").onclick = () => {
       Store.imprimerFacture(vente);

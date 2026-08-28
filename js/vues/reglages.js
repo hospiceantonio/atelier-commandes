@@ -96,8 +96,9 @@ const VueReglages = (() => {
         '<div id="zone-equipe"><p style="margin:0;font-size:13px;color:var(--encre-tres-douce)">Chargement…</p></div>' +
         '<button type="button" class="btn btn-clair btn-bloc" id="btn-moderateur" style="margin-top:12px">' +
           UI.icone("plus", "ic-sm") + "Ajouter un modérateur</button>" +
-        '<div class="aide" style="margin-top:8px">Un modérateur enregistre les commandes et les ventes ' +
-          "de l'atelier. Il ne peut ni modifier ni supprimer, ni voir ces réglages.</div>" +
+        '<div class="aide" style="margin-top:8px">Chaque modérateur a ses propres droits, ' +
+          'que vous réglez avec le bouton « Droits ». Les réglages de l\'atelier et ' +
+          "l'équipe lui restent fermés dans tous les cas.</div>" +
       "</div>" +
 
       '<div class="carte" style="margin-top:14px">' +
@@ -236,18 +237,33 @@ const VueReglages = (() => {
           "Aucun modérateur. Vous êtes seul à gérer cet atelier.</p>";
         return;
       }
+      const compteDroits = (m) => {
+        const d = Api.lireDroits(m);
+        return Api.DROITS.filter((x) => d[x.cle]).length;
+      };
+
       zone.innerHTML = '<div class="mini-liste">' +
         membres.map((m) =>
           '<div class="mini"><span class="l"><strong>' + e(m.nom_complet || m.email) + "</strong>" +
             '<br><span style="color:var(--encre-tres-douce);font-size:12px">' + e(m.email) +
-            (m.telephone ? " · " + e(Utils.fmtTel(m.telephone)) : "") + "</span></span>" +
-            '<button type="button" class="btn btn-danger btn-sm" data-retirer="' + m.id + '">Retirer</button>' +
+            (m.telephone ? " · " + e(Utils.fmtTel(m.telephone)) : "") + "<br>" +
+            compteDroits(m) + " droit" + (compteDroits(m) > 1 ? "s" : "") +
+            " sur " + Api.DROITS.length + "</span></span>" +
+            '<span class="btn-rangee" style="flex:none;gap:6px">' +
+              '<button type="button" class="btn btn-clair btn-sm" data-droits="' + m.id + '">Droits</button>' +
+              '<button type="button" class="btn btn-danger btn-sm" data-retirer="' + m.id + '">Retirer</button>' +
+            "</span>" +
           "</div>"
         ).join("") + "</div>";
 
       /* onclick (et non addEventListener) : la zone est re-rendue à chaque
          retrait, les écouteurs s'empileraient sinon. */
       zone.onclick = async (ev) => {
+        const boutonDroits = ev.target.closest("[data-droits]");
+        if (boutonDroits) {
+          ouvrirDroits(membres.find((m) => m.id === boutonDroits.dataset.droits), rendreEquipe);
+          return;
+        }
         const bouton = ev.target.closest("[data-retirer]");
         if (!bouton) return;
         const membre = membres.find((m) => m.id === bouton.dataset.retirer);
@@ -310,6 +326,66 @@ const VueReglages = (() => {
           bouton.disabled = false;
         }
       };
+    };
+  }
+
+  /* ---------- Droits d'un modérateur ----------
+     Ce que l'administrateur coche ici, le serveur l'applique (a_droit,
+     dans supabase/droits.sql). Décocher une case ne fait donc pas que
+     masquer un bouton : la requête correspondante est refusée. */
+
+  function ouvrirDroits(membre, apres) {
+    const droits = Api.lireDroits(membre);
+
+    const corps = UI.ouvrirFeuille("Droits de " + (membre.nom_complet || membre.email),
+      '<div class="carte">' +
+        '<p style="margin:0 0 14px;font-size:13px;line-height:1.5;color:var(--encre-douce)">' +
+          "Ce compte ne verra que ce que vous cochez ici. Les réglages de " +
+          "l'atelier et l'équipe lui restent fermés dans tous les cas.</p>" +
+        Api.DROITS.map((d) =>
+          '<label class="interrupteur" style="display:flex;margin-bottom:10px">' +
+            '<input type="checkbox" data-droit="' + e(d.cle) + '"' +
+              (droits[d.cle] ? " checked" : "") + ">" +
+            "<span>" + e(d.libelle) +
+              (d.aide
+                ? '<br><span style="color:var(--encre-tres-douce);font-size:12px">' +
+                    e(d.aide) + "</span>"
+                : "") +
+            "</span>" +
+          "</label>"
+        ).join("") +
+        '<button type="button" class="btn btn-bloc" id="droits-ok" style="margin-top:4px">' +
+          UI.icone("check", "ic-sm") + "Enregistrer les droits</button>" +
+      "</div>");
+
+    const casePour = (cle) => UI.$('[data-droit="' + cle + '"]', corps);
+
+    /* Imprimer les recettes suppose de pouvoir les consulter : on lie les
+       deux cases plutôt que de laisser cocher un droit sans effet. */
+    const voir = casePour("recettes_voir");
+    const imprimer = casePour("recettes_recap");
+    imprimer.addEventListener("change", () => {
+      if (imprimer.checked) voir.checked = true;
+    });
+    voir.addEventListener("change", () => {
+      if (!voir.checked) imprimer.checked = false;
+    });
+
+    UI.$("#droits-ok", corps).onclick = async () => {
+      const bouton = UI.$("#droits-ok", corps);
+      bouton.disabled = true;
+      const nouveaux = {};
+      for (const d of Api.DROITS) nouveaux[d.cle] = casePour(d.cle).checked;
+      try {
+        await Api.mettreAJour("profils", membre.id, { droits: nouveaux });
+        UI.feuilleSansRappel();
+        UI.fermerFeuille();
+        UI.toast("Droits enregistrés", "ok");
+        if (apres) apres();
+      } catch (err) {
+        UI.toast(err.message || "Enregistrement impossible", "erreur");
+        bouton.disabled = false;
+      }
     };
   }
 
