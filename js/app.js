@@ -26,6 +26,10 @@
     { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v), module: "vitrine" },
     { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v), module: "vitrine" },
     { motif: /^\/vente\/([^/]+)$/, vue: (v, m) => VueVentes.detail(v, m[1]), module: "vitrine" },
+    { motif: /^\/stock$/, vue: (v) => VueStock.menu(v), module: "vitrine" },
+    { motif: /^\/stock\/entree$/, vue: (v) => VueStock.entree(v), module: "vitrine" },
+    { motif: /^\/stock\/sortie$/, vue: (v) => VueStock.sortie(v), module: "vitrine" },
+    { motif: /^\/stock\/inventaire$/, vue: (v) => VueStock.inventaire(v), module: "vitrine" },
     { motif: /^\/produit-gere\/nouveau$/, vue: (v) => VueProduits.formulaire(v), module: "vitrine" },
     { motif: /^\/produit-gere\/([^/]+)$/, vue: (v, m) => VueProduits.formulaire(v, m[1]), module: "vitrine" },
   ];
@@ -394,6 +398,10 @@
           "Facture sur les articles en stock"]);
       }
       choix.push(["#/ventes", "stats", "Mes ventes", "Historique des factures"]);
+      if (Api.estAdmin()) {
+        choix.push(["#/stock", "boutique", "Gestion de stock",
+          "Approvisionner, inventorier, sortir"]);
+      }
     }
     const corps = UI.ouvrirFeuille("Que voulez-vous créer ?",
       choix.map((c, i) => ligne(c[0], c[1], c[2], c[3], i === 0)).join(""));

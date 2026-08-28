@@ -17,7 +17,12 @@ const VueProduits = (() => {
     UI.entete({
       titre: "Vitrine",
       sous: produits.length + " réalisation" + (produits.length > 1 ? "s" : "") + " publiée" + (produits.length > 1 ? "s" : ""),
-      actions: '<a class="btn-ic" href="#/produit-gere/nouveau" aria-label="Nouvelle réalisation">' + UI.icone("plus") + "</a>",
+      actions:
+        (Api.estAdmin()
+          ? '<a class="btn-ic" href="#/stock" aria-label="Gestion de stock">' +
+              UI.icone("boutique") + "</a>"
+          : "") +
+        '<a class="btn-ic" href="#/produit-gere/nouveau" aria-label="Nouvelle réalisation">' + UI.icone("plus") + "</a>",
     });
 
     if (!produits.length) {
@@ -208,6 +213,12 @@ const VueProduits = (() => {
             : ((produit && produit.couverture) || gardees[0] || "");
         }
 
+        /* Le stock ne fait PAS partie des valeurs écrites ici. Toute
+           variation passe par le journal (supabase/stock.sql) : à la
+           création on approvisionne, à la modification on inventorie.
+           Sans cela, ce formulaire serait le seul chemin par lequel le
+           stock bougerait sans laisser de trace. */
+        const stockVoulu = Math.max(0, Math.round(Utils.lireNombre(UI.$("#prod-stock").value)));
         const valeurs = {
           nom,
           code: UI.$("#prod-code").value.trim(),
@@ -215,7 +226,6 @@ const VueProduits = (() => {
           prix,
           prix_visible: UI.$("#prod-prix-visible").checked,
           en_avant: UI.$("#prod-avant").checked,
-          stock: Math.max(0, Math.round(Utils.lireNombre(UI.$("#prod-stock").value))),
           couverture,
           modifie_le: new Date().toISOString(),
         };
@@ -231,7 +241,18 @@ const VueProduits = (() => {
             anciennes.map((ph) => ph.data_url).filter((v) => gardees.indexOf(v) < 0),
             Stockage.VITRINE);
         } else {
-          enregistre = await Api.inserer("produits", { atelier_id: Api.atelierId(), ...valeurs });
+          enregistre = await Api.inserer("produits",
+            { atelier_id: Api.atelierId(), ...valeurs, stock: 0 });
+        }
+
+        if (stockVoulu !== (enregistre.stock || 0)) {
+          const apres = produit
+            ? await Api.inventorierStock([{ produit_id: enregistre.id, compte: stockVoulu,
+                motif: "Correction depuis la fiche" }])
+            : await Api.approvisionnerStock(enregistre.id, stockVoulu, "Stock initial");
+          /* inventorierStock ne rend qu'un résumé : on relit la ligne
+             pour que la suite parle du stock réellement enregistré. */
+          enregistre = apres && apres.id ? apres : await Api.lireLigne("produits", enregistre.id);
         }
         for (let i = 0; i < photos.length; i++) {
           await Api.inserer("photos_produits", {

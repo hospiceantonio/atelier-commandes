@@ -674,20 +674,30 @@ const Store = (() => {
     Utils.imprimerA4("Journal des versements", journalA4(stats, libelle, nomParClient));
 
   /** Annuler une facture remet les articles en stock. */
-  async function supprimerVente(id) {
-    const vente = await lireVente(id);
-    if (!vente) throw new Error("Facture introuvable.");
-    for (const ligne of vente.lignes) {
-      const produit = await Api.lireLigne("produits", ligne.produit_id);
-      if (produit) {
-        await Api.mettreAJour("produits", produit.id, {
-          stock: (Number(produit.stock) || 0) + (Number(ligne.quantite) || 0),
-          modifie_le: new Date().toISOString(),
-        });
-      }
-    }
-    await Api.supprimerLigne("ventes", id);
-  }
+  /**
+   * Annuler une facture : remise en stock, trace au journal et
+   * suppression, en une seule transaction côté serveur. L'application
+   * faisait les trois séparément — rien ne garantissait qu'elles
+   * aboutissent toutes, et la remise en stock ne laissait aucune trace.
+   */
+  const supprimerVente = (id) => Api.annulerVente(id);
+
+  /* ---------- Stock ---------- */
+
+  const listerMouvements = async (limite) => {
+    const lignes = await Api.lister("mouvements_stock", "cree_le", false);
+    return limite ? lignes.slice(0, limite) : lignes;
+  };
+
+  const LIBELLES_MOUVEMENT = {
+    entree: "Approvisionnement",
+    sortie: "Sortie",
+    inventaire: "Inventaire",
+    vente: "Vente",
+    retour_vente: "Facture annulée",
+  };
+
+  const libelleMouvement = (type) => LIBELLES_MOUVEMENT[type] || type;
 
   const articlesVendus = (vente) =>
     (vente.lignes || []).reduce((somme, l) => somme + (Number(l.quantite) || 0), 0);
@@ -826,6 +836,7 @@ const Store = (() => {
     photosDeCommande, ajouterPhoto, supprimerPhoto,
     listerDepenses, ajouterDepense, supprimerDepense,
     listerVentes, lireVente, enregistrerVente, supprimerVente, articlesVendus,
+    listerMouvements, libelleMouvement,
     messageVente, lienWhatsAppVente, factureA4, imprimerFacture,
     rapportA4, imprimerRapport, journalA4, imprimerJournal,
     paiementsSurPeriode, statsPeriode, messageCommande, exporter,

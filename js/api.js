@@ -234,6 +234,23 @@ const Api = (() => {
 
   const annulerChangementFormule = () => rpc("annuler_changement_formule");
 
+  /* ---------- Stock ----------
+     Toute variation passe par le serveur : il bouge le stock et écrit
+     le journal dans la même transaction (supabase/stock.sql). Le client
+     n'écrit jamais la colonne « stock » en direct. */
+
+  const approvisionnerStock = (produit, quantite, motif) =>
+    rpc("approvisionner_stock", { p_produit: produit, p_quantite: quantite, p_motif: motif || "" });
+
+  const sortirStock = (produit, quantite, motif) =>
+    rpc("sortir_stock", { p_produit: produit, p_quantite: quantite, p_motif: motif });
+
+  /** `lignes` : [{ produit_id, compte }] — ce qu'on a compté, pas l'écart. */
+  const inventorierStock = (lignes) =>
+    rpc("inventorier_stock", { p_lignes: lignes });
+
+  const annulerVente = (vente) => rpc("annuler_vente", { p_vente: vente });
+
   /* Modules ouverts par la formule. Le serveur applique les mêmes règles
      (module_atelier / module_vitrine) : ceci n'est que le confort. */
   const formuleCourante = () => (atelier && atelier.formule) || "atelier_vitrine";
@@ -424,6 +441,7 @@ const Api = (() => {
     creerCompte, creerCompteAdmin, rattacherProfil, deconnexion,
     listerFormules, creerMonAtelier, formuleCourante, aModuleAtelier, aModuleVitrine,
     demanderChangementFormule, annulerChangementFormule,
+    approvisionnerStock, sortirStock, inventorierStock, annulerVente,
     lister, listerTranche, listerPar, lireLigne, inserer, mettreAJour, mettreAJourPar,
     supprimerLigne, rpc,
     deposerFichier, urlPublique, urlSignee, supprimerFichiers,
