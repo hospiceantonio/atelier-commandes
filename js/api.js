@@ -459,6 +459,57 @@ const Api = (() => {
     return verifier(await requete.range(debut, fin)) || [];
   }
 
+  /* ---------- Chercher dans la boutique ----------
+   *
+   * TOUT SE PASSE SUR LE SERVEUR. Filtrer dans le téléphone supposerait
+   * d'avoir d'abord téléchargé le catalogue entier — des centaines de
+   * modèles et leurs vignettes — pour en garder trois. Ici on n'appelle
+   * que la page demandée, déjà filtrée et triée (voir les index de
+   * supabase/recherche.sql).
+   */
+
+  const TRIS = {
+    recent: { colonne: "cree_le", ascendant: false },
+    prix_croissant: { colonne: "prix", ascendant: true },
+    prix_decroissant: { colonne: "prix", ascendant: false },
+    nom: { colonne: "nom", ascendant: true },
+  };
+
+  async function chercherProduits(criteres, debut, fin) {
+    const c = criteres || {};
+    let q = client.from("produits").select("*");
+
+    if (c.texte) {
+      /* La virgule et les parenthèses séparent les termes dans la
+         grammaire de PostgREST : les laisser passer casserait la
+         requête. On les remplace par des espaces plutôt que de refuser
+         la saisie. */
+      const motif = "*" + String(c.texte).replace(/[,()*%\\]/g, " ").trim() + "*";
+      q = q.or(["nom.ilike." + motif, "code.ilike." + motif,
+                "categorie.ilike." + motif].join(","));
+    }
+    if (c.atelier) q = q.eq("atelier_id", c.atelier);
+    if (c.categorie) q = q.eq("categorie", c.categorie);
+    if (c.sexe) q = q.eq("sexe", c.sexe);
+    if (c.age) q = q.eq("tranche_age", c.age);
+    /* « contient cette valeur » sur un tableau : c'est l'index GIN qui
+       répond, pas un parcours. */
+    if (c.taille) q = q.contains("tailles", [c.taille]);
+    if (c.couleur) q = q.contains("couleurs", [c.couleur]);
+    if (c.tissu) q = q.contains("tissus", [c.tissu]);
+    if (c.tendance) q = q.eq("tendance", true);
+    if (c.surMesure) q = q.eq("sur_mesure", true);
+    if (c.prixMax) q = q.lte("prix", c.prixMax);
+
+    const tri = TRIS[c.tri] || TRIS.recent;
+    q = q.order(tri.colonne, { ascending: tri.ascendant });
+    return verifier(await q.range(debut, fin)) || [];
+  }
+
+  /** Les valeurs réellement présentes en boutique, en un aller-retour :
+      un filtre ne doit proposer que ce qui mène quelque part. */
+  const vocabulaireBoutique = () => rpc("vocabulaire_boutique");
+
   async function listerPar(table, colonne, valeur, colonneOrdre, ascendant) {
     let requete = client.from(table).select("*").eq(colonne, valeur);
     if (colonneOrdre) requete = requete.order(colonneOrdre, { ascending: !!ascendant });
@@ -524,7 +575,8 @@ const Api = (() => {
     listerFormules, creerMonAtelier, formuleCourante, aModuleAtelier, aModuleVitrine,
     demanderChangementFormule, annulerChangementFormule,
     approvisionnerStock, sortirStock, inventorierStock, annulerVente,
-    lister, listerTranche, listerPar, lireLigne, inserer, mettreAJour, mettreAJourPar,
+    lister, listerTranche, listerPar, chercherProduits, vocabulaireBoutique,
+    lireLigne, inserer, mettreAJour, mettreAJourPar,
     supprimerLigne, rpc,
     deposerFichier, urlPublique, urlSignee, supprimerFichiers,
   };

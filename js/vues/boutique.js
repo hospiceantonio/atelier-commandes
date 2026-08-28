@@ -211,133 +211,264 @@ const VueBoutique = (() => {
     );
   }
 
+  /* ---------- Chercher : les critères, et leur mise en mots ----------
+     Un même objet sert à interroger le serveur et à dessiner les puces
+     qu'on retire d'un doigt : ce qui est affiché ne peut donc pas mentir
+     sur ce qui est demandé. */
+
+  const TRIS = [
+    { cle: "recent", nom: "Nouveautés" },
+    { cle: "prix_croissant", nom: "Prix croissant" },
+    { cle: "prix_decroissant", nom: "Prix décroissant" },
+    { cle: "nom", nom: "Nom" },
+  ];
+
+  function etiquettesCriteres(c, devise) {
+    const bouts = [];
+    if (c.texte) bouts.push({ cle: "texte", texte: "« " + c.texte + " »" });
+    if (c.categorie) bouts.push({ cle: "categorie", texte: c.categorie });
+    if (c.sexe) bouts.push({ cle: "sexe", texte: Mode.etiquetteSexe(c.sexe) });
+    if (c.age) bouts.push({ cle: "age", texte: Mode.etiquetteAge(c.age) });
+    if (c.taille) bouts.push({ cle: "taille", texte: "Taille " + c.taille });
+    if (c.couleur) bouts.push({ cle: "couleur", texte: c.couleur });
+    if (c.tissu) bouts.push({ cle: "tissu", texte: c.tissu });
+    if (c.prixMax) bouts.push({ cle: "prixMax", texte: "≤ " + Utils.fmtMontant(c.prixMax, devise) });
+    if (c.tendance) bouts.push({ cle: "tendance", texte: "Tendance" });
+    if (c.surMesure) bouts.push({ cle: "surMesure", texte: "Sur mesure" });
+    if (c.tri && c.tri !== "recent") {
+      bouts.push({ cle: "tri", texte: (TRIS.find((t) => t.cle === c.tri) || {}).nom });
+    }
+    return bouts;
+  }
+
+  const compterCriteres = (c) => etiquettesCriteres(c, "").length;
+
   async function accueil(vue) {
     const ateliers = await Api.lister("ateliers_publics", "nom", true);
     const parId = {};
     for (const a of ateliers) parId[a.id] = a;
+    const devise = (ateliers[0] && ateliers[0].devise) || "FCFA";
+
+    /* Le vocabulaire des filtres vient du serveur, en un aller-retour :
+       on ne propose que des valeurs qui mènent quelque part, sans avoir
+       à télécharger le catalogue pour les déduire. */
+    let vocabulaire = { categories: [], tailles: [], couleurs: [], tissus: [], prix_max: 0 };
+    try {
+      Object.assign(vocabulaire, await Api.vocabulaireBoutique());
+    } catch (_) { /* recherche.sql pas encore exécuté : filtres réduits */ }
 
     let bannieres = [];
     try {
       bannieres = (await Api.lister("bannieres", "position", true)).filter((b) => b.active);
     } catch (_) { /* base pas encore à jour : pas de bannière */ }
 
-    /* Le premier lot sert à décider quoi afficher : les mises en avant
-       viennent de la première page, pas d'un second appel complet. */
-    const premier = await Api.listerTranche("produits", "cree_le", false, 0, PAR_LOT - 1);
-    const visibles = (liste) => liste.filter((p) => parId[p.atelier_id]);
-
     UI.entete({ titre: "Atelier", sous: "Les réalisations de nos ateliers de couture" });
 
-    if (!premier.length && !bannieres.length) {
-      vue.innerHTML = UI.vide("image", "Aucune réalisation publiée",
-        "Les ateliers ajouteront bientôt leurs créations — revenez vite !");
-      return;
-    }
-
-    const enAvant = visibles(premier).filter((p) => p.en_avant);
-    const carrousel = bannieres.map(carteBanniere)
-      .concat(enAvant.map((p) => carteAvant(p, parId[p.atelier_id])));
+    const criteres = {};
+    const visibles = (liste) => liste.filter((p) => parId[p.atelier_id]);
 
     vue.innerHTML =
-      (carrousel.length
-        ? '<div class="titre-categorie" style="margin-top:0">★ À la une</div>' +
-          '<div class="carrousel" id="carrousel-avant">' + carrousel.join("") + "</div>" +
-          (carrousel.length > 1
-            ? '<div class="carrousel-points" id="carrousel-points" aria-hidden="true">' +
-                carrousel.map(() => '<span class="carrousel-point"></span>').join("") +
-              "</div>"
-            : "")
-        : "") +
-      /* Sans aucune réalisation à montrer, ni titre ni grille vide : on
-         le dit, et l'invitation aux maisons prend tout son sens. */
-      (visibles(premier).length
-        ? '<div class="titre-categorie">Toutes les réalisations</div>' +
-          '<div class="grille-produits" id="galerie"></div>' +
-          '<div id="sentinelle" style="height:1px"></div>' +
-          '<div class="galerie-attente" id="attente" hidden>' +
-            '<span class="rondelle"></span><span>Chargement des modèles…</span></div>'
-        : UI.vide("image", "Aucune réalisation publiée",
-            "Les maisons ajouteront bientôt leurs créations — revenez vite !")) +
-      '<div id="galerie-fin"></div>';
+      '<div class="recherche">' + UI.icone("recherche") +
+        '<input id="rech-produits" type="search" autocomplete="off" ' +
+          'placeholder="Chercher un modèle, un code, un rayon…">' +
+      "</div>" +
+      '<div class="barre-filtres">' +
+        '<button type="button" class="btn btn-clair btn-sm" id="btn-filtres">' +
+          UI.icone("reglages", "ic-sm") + "Filtrer" +
+          '<span class="compte-filtres" id="compte-filtres" hidden></span></button>' +
+        '<div class="puces" id="criteres-actifs"></div>' +
+      "</div>" +
+      '<div id="zone-avant"></div>' +
+      '<div id="zone-galerie"></div>';
 
-    const galerie = UI.$("#galerie");
-    const attente = UI.$("#attente");
-    const fin = UI.$("#galerie-fin");
+    const zoneAvant = UI.$("#zone-avant");
+    const zoneGalerie = UI.$("#zone-galerie");
+    let observateur = null;
 
-    /* Rien à galerie : l'invitation reste, le reste n'a pas lieu d'être. */
-    if (!galerie) {
-      fin.innerHTML = blocFinal(ateliers.length, 0);
-      brancherCarrousel();
-      return;
-    }
+    /* ---------- La galerie, refaite à chaque changement ---------- */
 
-    let poses = 0;
-    let lots = 0;
-    let demandes = premier.length;
-    let epuise = false;
-    let enCours = false;
+    async function montrerGalerie() {
+      if (observateur) { observateur.disconnect(); observateur = null; }
+      const filtre = compterCriteres(criteres) > 0;
 
-    function ajouter(liste) {
-      const html = [];
-      for (const p of liste) {
-        html.push(carteProduit(p, parId[p.atelier_id], poses % 7 === 3));
-        poses++;
-      }
-      /* Une invitation tous les deux lots : assez pour être vue, assez
-         rare pour ne pas hacher la galerie. */
-      if (lots % 2 === 1) html.push(carteInvitation(Math.floor(lots / 2)));
-      galerie.insertAdjacentHTML("beforeend", html.join(""));
-      lots++;
-    }
+      zoneGalerie.innerHTML =
+        '<div class="galerie-attente"><span class="rondelle"></span><span>Recherche…</span></div>';
 
-    ajouter(visibles(premier));
-    if (premier.length < PAR_LOT) epuise = true;
-
-    function terminer() {
-      epuise = true;
-      observateur.disconnect();
-      attente.hidden = true;
-      if (!fin.innerHTML) fin.innerHTML = blocFinal(ateliers.length, poses);
-    }
-
-    async function lotSuivant() {
-      /* On demande à partir du nombre de lignes déjà demandées, pas
-         posées : les produits d'ateliers expirés sont écartés à
-         l'affichage mais comptent dans la pagination du serveur. */
-      const tranche = await Api.listerTranche("produits", "cree_le", false,
-        demandes, demandes + PAR_LOT - 1);
-      demandes += tranche.length;
-      if (!tranche.length) { terminer(); return; }
-      ajouter(visibles(tranche));
-      if (tranche.length < PAR_LOT) terminer();
-    }
-
-    const observateur = new IntersectionObserver(async (entrees) => {
-      if (!entrees[0].isIntersecting || enCours) return;
-      if (epuise) { terminer(); return; }
-      enCours = true;
-      attente.hidden = false;
+      let premier;
       try {
-        await lotSuivant();
+        premier = await Api.chercherProduits(criteres, 0, PAR_LOT - 1);
       } catch (err) {
-        UI.toast(err.message || "Chargement impossible", "erreur");
-        terminer();
+        zoneGalerie.innerHTML = UI.vide("alerte", "Recherche impossible",
+          err.message || "Réessayez dans un instant.");
+        return;
       }
-      enCours = false;
-      if (epuise) return;
-      attente.hidden = true;
-      /* La sentinelle peut rester visible d'un lot au suivant : un
-         observateur ne signale que les changements, il ne redirait donc
-         rien et le défilement s'arrêterait là. On réarme. */
-      observateur.unobserve(sentinelle);
-      observateur.observe(sentinelle);
-    }, { rootMargin: "600px 0px" });
 
-    const sentinelle = UI.$("#sentinelle");
-    if (epuise) terminer();
-    else observateur.observe(sentinelle);
+      /* Le carrousel n'a de sens que sur la boutique entière : dès qu'on
+         cherche, il ferait diversion. */
+      zoneAvant.innerHTML = "";
+      if (!filtre) {
+        const enAvant = visibles(premier).filter((p) => p.en_avant);
+        const carrousel = bannieres.map(carteBanniere)
+          .concat(enAvant.map((p) => carteAvant(p, parId[p.atelier_id])));
+        if (carrousel.length) {
+          zoneAvant.innerHTML =
+            '<div class="titre-categorie" style="margin-top:0">★ À la une</div>' +
+            '<div class="carrousel" id="carrousel-avant">' + carrousel.join("") + "</div>" +
+            (carrousel.length > 1
+              ? '<div class="carrousel-points" id="carrousel-points" aria-hidden="true">' +
+                  carrousel.map(() => '<span class="carrousel-point"></span>').join("") +
+                "</div>"
+              : "");
+          brancherCarrousel();
+        }
+      }
 
-    brancherCarrousel();
+      if (!visibles(premier).length) {
+        zoneGalerie.innerHTML = filtre
+          ? UI.vide("recherche", "Aucun modèle ne correspond",
+              "Élargissez la recherche : retirez un filtre ci-dessus.",
+              '<button type="button" class="btn btn-clair" id="vider-filtres">' +
+                "Effacer les filtres</button>")
+          : UI.vide("image", "Aucune réalisation publiée",
+              "Les maisons ajouteront bientôt leurs créations — revenez vite !");
+        const vider = UI.$("#vider-filtres");
+        if (vider) vider.onclick = () => { effacerTout(); };
+        if (!filtre) zoneGalerie.insertAdjacentHTML("beforeend", blocFinal(ateliers.length, 0));
+        return;
+      }
+
+      zoneGalerie.innerHTML =
+        '<div class="titre-categorie">' +
+          (filtre ? "Résultats" : "Toutes les réalisations") + "</div>" +
+        '<div class="grille-produits" id="galerie"></div>' +
+        '<div id="sentinelle" style="height:1px"></div>' +
+        '<div class="galerie-attente" id="attente" hidden>' +
+          '<span class="rondelle"></span><span>Chargement des modèles…</span></div>' +
+        '<div id="galerie-fin"></div>';
+
+      const galerie = UI.$("#galerie");
+      const attente = UI.$("#attente");
+      const fin = UI.$("#galerie-fin");
+      const sentinelle = UI.$("#sentinelle");
+
+      let poses = 0;
+      let lots = 0;
+      let demandes = premier.length;
+      let epuise = false;
+      let enCours = false;
+
+      function ajouter(liste) {
+        const html = [];
+        for (const p of liste) {
+          html.push(carteProduit(p, parId[p.atelier_id], poses % 7 === 3));
+          poses++;
+        }
+        /* Une invitation tous les deux lots — mais jamais au milieu de
+           résultats de recherche : on cherche un modèle, pas une offre. */
+        if (!filtre && lots % 2 === 1) html.push(carteInvitation(Math.floor(lots / 2)));
+        galerie.insertAdjacentHTML("beforeend", html.join(""));
+        lots++;
+      }
+
+      ajouter(visibles(premier));
+      if (premier.length < PAR_LOT) epuise = true;
+
+      function terminer() {
+        epuise = true;
+        if (observateur) observateur.disconnect();
+        attente.hidden = true;
+        if (!fin.innerHTML && !filtre) fin.innerHTML = blocFinal(ateliers.length, poses);
+      }
+
+      async function lotSuivant() {
+        /* On demande à partir du nombre de lignes déjà demandées, pas
+           posées : les produits d'ateliers expirés sont écartés à
+           l'affichage mais comptent dans la pagination du serveur. */
+        const tranche = await Api.chercherProduits(criteres, demandes, demandes + PAR_LOT - 1);
+        demandes += tranche.length;
+        if (!tranche.length) { terminer(); return; }
+        ajouter(visibles(tranche));
+        if (tranche.length < PAR_LOT) terminer();
+      }
+
+      observateur = new IntersectionObserver(async (entrees) => {
+        if (!entrees[0].isIntersecting || enCours) return;
+        if (epuise) { terminer(); return; }
+        enCours = true;
+        attente.hidden = false;
+        try {
+          await lotSuivant();
+        } catch (err) {
+          UI.toast(err.message || "Chargement impossible", "erreur");
+          terminer();
+        }
+        enCours = false;
+        if (epuise) return;
+        attente.hidden = true;
+        /* La sentinelle peut rester visible d'un lot au suivant : un
+           observateur ne signale que les changements, il ne redirait donc
+           rien et le défilement s'arrêterait là. On réarme. */
+        observateur.unobserve(sentinelle);
+        observateur.observe(sentinelle);
+      }, { rootMargin: "600px 0px" });
+
+      if (epuise) terminer();
+      else observateur.observe(sentinelle);
+    }
+
+    /* ---------- Les critères en cours, retirables un à un ---------- */
+
+    function montrerCriteres() {
+      const bouts = etiquettesCriteres(criteres, devise);
+      UI.$("#criteres-actifs").innerHTML = bouts.map((b) =>
+        '<button type="button" class="puce actif" data-retirer="' + e(b.cle) + '">' +
+          e(b.texte) + UI.icone("fermer", "ic-sm") + "</button>").join("") +
+        (bouts.length > 1
+          ? '<button type="button" class="puce" data-retirer="tout">Tout effacer</button>'
+          : "");
+      const compte = UI.$("#compte-filtres");
+      compte.hidden = !bouts.length;
+      compte.textContent = bouts.length;
+    }
+
+    function effacerTout() {
+      for (const cle of Object.keys(criteres)) delete criteres[cle];
+      UI.$("#rech-produits").value = "";
+      montrerCriteres();
+      montrerGalerie();
+    }
+
+    UI.$("#criteres-actifs").addEventListener("click", (ev) => {
+      const bouton = ev.target.closest("[data-retirer]");
+      if (!bouton) return;
+      if (bouton.dataset.retirer === "tout") { effacerTout(); return; }
+      delete criteres[bouton.dataset.retirer];
+      if (bouton.dataset.retirer === "texte") UI.$("#rech-produits").value = "";
+      montrerCriteres();
+      montrerGalerie();
+    });
+
+    /* La frappe ne part pas au serveur lettre par lettre : on attend que
+       le doigt s'arrête. Sur un réseau lent, c'est la différence entre
+       une recherche et une avalanche. */
+    let minuterie = null;
+    UI.$("#rech-produits").addEventListener("input", (ev) => {
+      const terme = ev.target.value.trim();
+      clearTimeout(minuterie);
+      minuterie = setTimeout(() => {
+        if (terme) criteres.texte = terme; else delete criteres.texte;
+        montrerCriteres();
+        montrerGalerie();
+      }, 350);
+    });
+
+    UI.$("#btn-filtres").onclick = () => ouvrirFiltres(criteres, vocabulaire, devise, () => {
+      montrerCriteres();
+      montrerGalerie();
+    });
+
+    montrerCriteres();
+    await montrerGalerie();
 
     /* Le lien s'ouvre dans le navigateur (window.open passe par le pont
        Android, qui le confie au système). */
@@ -350,6 +481,94 @@ const VueBoutique = (() => {
       });
       lancerDefilement(zone, UI.$("#carrousel-points"));
     }
+  }
+
+  /* ---------- La feuille des filtres ----------
+     Une seule valeur par critère : deux tailles à la fois ne veulent
+     rien dire pour qui cherche à s'habiller, et la requête reste simple
+     — donc rapide. */
+
+  function ouvrirFiltres(criteres, vocabulaire, devise, apres) {
+    const groupe = (titre, cle, valeurs, etiquette) => {
+      if (!valeurs.length) return "";
+      return '<div class="champ"><label>' + e(titre) + "</label>" +
+        '<div class="puces puces-grille" data-groupe="' + e(cle) + '">' +
+          valeurs.map((v) => {
+            const code = typeof v === "string" ? v : v.code;
+            const nom = typeof v === "string" ? v : v.nom;
+            return '<button type="button" class="puce' +
+              (criteres[cle] === code ? " actif" : "") + '" data-valeur="' + e(code) + '">' +
+              e(etiquette ? etiquette(nom) : nom) + "</button>";
+          }).join("") +
+        "</div></div>";
+    };
+
+    const paliers = [];
+    const max = Number(vocabulaire.prix_max) || 0;
+    if (max > 0) {
+      for (const part of [0.25, 0.5, 0.75]) {
+        const seuil = Math.ceil((max * part) / 1000) * 1000;
+        if (seuil > 0 && paliers.indexOf(seuil) < 0) paliers.push(seuil);
+      }
+    }
+
+    const corps = UI.ouvrirFeuille("Filtrer les réalisations",
+      '<div class="carte">' +
+        groupe("Trier par", "tri", TRIS.map((t) => ({ code: t.cle, nom: t.nom }))) +
+        groupe("Catégorie", "categorie", vocabulaire.categories || []) +
+        groupe("Pour qui", "sexe", Mode.SEXES.filter((s) => s.code)) +
+        groupe("Tranche d'âge", "age", Mode.AGES.filter((a) => a.code)) +
+        groupe("Taille", "taille", vocabulaire.tailles || []) +
+        groupe("Couleur", "couleur", vocabulaire.couleurs || []) +
+        groupe("Tissu", "tissu", vocabulaire.tissus || []) +
+        groupe("Prix maximum", "prixMax",
+          paliers.map((p) => ({ code: String(p), nom: Utils.fmtMontant(p, devise) }))) +
+        '<div class="champ"><label>Repères</label>' +
+          '<div class="puces puces-grille" data-groupe="marques">' +
+            '<button type="button" class="puce' + (criteres.tendance ? " actif" : "") +
+              '" data-valeur="tendance">Tendance</button>' +
+            '<button type="button" class="puce' + (criteres.surMesure ? " actif" : "") +
+              '" data-valeur="surMesure">Sur mesure</button>' +
+          "</div></div>" +
+        '<div class="btn-rangee" style="margin-top:6px">' +
+          '<button type="button" class="btn btn-clair" id="fl-effacer">Tout effacer</button>' +
+          '<button type="button" class="btn" id="fl-voir">Voir les résultats</button>' +
+        "</div>" +
+      "</div>");
+
+    corps.addEventListener("click", (ev) => {
+      const bouton = ev.target.closest("[data-valeur]");
+      if (!bouton) return;
+      const zone = bouton.closest("[data-groupe]");
+      const cle = zone.dataset.groupe;
+      const valeur = bouton.dataset.valeur;
+
+      if (cle === "marques") {
+        if (criteres[valeur]) delete criteres[valeur]; else criteres[valeur] = true;
+        bouton.classList.toggle("actif");
+        bouton.setAttribute("aria-pressed", criteres[valeur] ? "true" : "false");
+        return;
+      }
+      /* Retoucher la valeur active la retire : c'est le seul moyen de
+         revenir en arrière sans quitter la feuille. */
+      const meme = criteres[cle] === valeur ||
+        (cle === "prixMax" && String(criteres.prixMax) === valeur);
+      if (meme) delete criteres[cle];
+      else criteres[cle] = cle === "prixMax" ? Number(valeur) : valeur;
+      for (const autre of zone.querySelectorAll("[data-valeur]")) {
+        autre.classList.toggle("actif", !meme && autre === bouton);
+      }
+    });
+
+    UI.$("#fl-effacer", corps).onclick = () => {
+      for (const cle of Object.keys(criteres)) if (cle !== "texte") delete criteres[cle];
+      UI.fermerFeuille();
+      apres();
+    };
+    UI.$("#fl-voir", corps).onclick = () => {
+      UI.fermerFeuille();
+      apres();
+    };
   }
 
   /* ---------- Fiche produit ---------- */

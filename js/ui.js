@@ -49,14 +49,28 @@ const UI = (() => {
 
   let feuilleAuFermer = null;
 
+  /**
+   * Ouvre le tiroir et rend le conteneur de son contenu.
+   *
+   * CE CONTENEUR EST NEUF À CHAQUE OUVERTURE. On se contentait avant de
+   * remplacer le contenu de #feuille-corps, qui restait le même élément :
+   * un écouteur posé dessus survivait donc à la fermeture et s'ajoutait à
+   * celui de la feuille suivante. Au deuxième passage, le même geste
+   * était traité DEUX FOIS — et un choix qui s'active puis se désactive
+   * ne laisse aucune trace, ce qui rend le défaut très difficile à voir.
+   * On remplace donc le nœud : ses écouteurs partent avec lui.
+   */
   function ouvrirFeuille(titre, html, auFermer) {
     const feuille = $("#feuille");
     $("#feuille-titre").textContent = titre;
-    $("#feuille-corps").innerHTML = html;
+    const ancien = $("#feuille-corps");
+    const corps = ancien.cloneNode(false);   // mêmes attributs, aucun écouteur
+    corps.innerHTML = html;
+    ancien.replaceWith(corps);
     feuille.hidden = false;
     document.body.style.overflow = "hidden";
     feuilleAuFermer = auFermer || null;
-    return $("#feuille-corps");
+    return corps;
   }
 
   function fermerFeuille() {
