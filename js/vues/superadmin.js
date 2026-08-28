@@ -300,7 +300,7 @@ const VueSuperAdmin = (() => {
 
         const utilisateur = await Api.creerCompteAdmin(email, motDePasse,
           nomAdmin, UI.$("#na-tel").value.trim());
-        await Api.rattacherProfil(utilisateur.id, { atelier_id: atelier.id });
+        await Api.rattacherAdmin(utilisateur.id, atelier.id);
         UI.toast("Atelier « " + nomAtelier + " » créé", "ok");
         location.hash = "#/atelier-gere/" + atelier.id;
       } catch (err) {

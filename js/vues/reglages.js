@@ -316,9 +316,7 @@ const VueReglages = (() => {
         try {
           const utilisateur = await Api.creerCompteAdmin(email, motDePasse, nom,
             UI.$("#mod-tel", corps).value.trim());
-          await Api.rattacherProfil(utilisateur.id, {
-            role: "moderateur", atelier_id: Api.atelierId(),
-          });
+          await Api.rattacherModerateur(utilisateur.id);
           UI.feuilleSansRappel();
           UI.fermerFeuille();
           UI.toast("Modérateur ajouté", "ok");

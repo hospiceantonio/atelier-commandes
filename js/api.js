@@ -21,6 +21,11 @@ const Api = (() => {
        rien touché, en général parce que le RLS a écarté la ligne visée. */
     "Cannot coerce the result to a single JSON object":
       "Aucune ligne correspondante — l'élément n'existe pas ou ne vous est pas accessible.",
+    /* Une fonction attendue n'est pas en base : un script du dossier
+       supabase/ n'a pas été exécuté. Le dire, plutôt que de laisser
+       remonter le jargon de PostgREST. */
+    "Could not find the function":
+      "Fonction absente du serveur — exécutez les scripts du dossier supabase/ dans Supabase (SQL Editor).",
   };
 
   function traduire(erreur) {
@@ -311,39 +316,43 @@ const Api = (() => {
     return data.user;
   }
 
-  /**
-   * Rattache un compte à un atelier : un modérateur ajouté par son
-   * administrateur, ou l'administrateur d'un atelier créé par le
-   * superadmin.
+  /* ---------- Rattacher un compte à son atelier ----------
    *
-   * EN DEUX TEMPS, ET C'EST LE POINT DÉLICAT. On n'utilise pas
-   * « update().select() », parce que PostgreSQL applique la règle de
-   * LECTURE aux lignes qu'un UPDATE ... RETURNING doit rendre — et la
-   * ligne visée, à cet instant, n'est pas encore rattachée à l'atelier :
-   * profils_modification laisse l'administrateur l'écrire,
-   * profils_lecture ne le laisse pas la lire. L'écriture passait donc,
-   * et ne renvoyait rien : l'écran annonçait un échec sur une opération
-   * réussie.
+   * L'application écrivait ici même dans « profils », puis relisait la
+   * ligne pour savoir si ça avait marché. Ce raisonnement était faux :
+   * l'écriture et la lecture ne passent pas par la même règle
+   * (profils_modification et profils_lecture ne voient pas les mêmes
+   * lignes), si bien que le rattachement pouvait aboutir pendant que
+   * l'écran annonçait un échec.
    *
-   * On écrit d'abord, on relit ensuite. Après l'écriture, la ligne porte
-   * l'atelier : elle est lisible, et sa présence prouve que ça a marché.
+   * Le rattachement est donc parti sur le serveur — supabase/equipe.sql.
+   * Les deux fonctions vérifient elles-mêmes qui appelle, écrivent, et
+   * renvoient la ligne sans dépendre d'aucune règle de lecture : ce
+   * qu'elles répondent est vrai.
    */
-  async function rattacherProfil(id, objet) {
-    const { error } = await client.from("profils").update(objet).eq("id", id);
-    if (error) throw new Error(traduire(error));
 
-    const { data, error: eLecture } = await client.from("profils")
-      .select("*").eq("id", id);
-    if (eLecture) throw new Error(traduire(eLecture));
-    if (!data || !data.length) {
-      /* Rien à relire : l'écriture n'a rien touché. Deux causes, et on ne
-         peut pas les distinguer d'ici — autant nommer les deux. */
-      throw new Error(
-        "Compte non rattaché : cette adresse est peut-être déjà utilisée " +
-        "ailleurs. Essayez une autre adresse.");
+  /** Le profil naît d'un déclencheur, juste après le compte : il peut
+      manquer d'un souffle. On patiente une fois plutôt que d'accuser. */
+  async function rattacher(nom, params) {
+    try {
+      return await rpc(nom, params);
+    } catch (err) {
+      if (!String(err.message || "").includes("PROFIL_ABSENT")) throw err;
+      await new Promise((suite) => setTimeout(suite, 1200));
+      try {
+        return await rpc(nom, params);
+      } catch (err2) {
+        if (!String(err2.message || "").includes("PROFIL_ABSENT")) throw err2;
+        throw new Error(
+          "Le compte est créé, mais son profil n'est pas encore arrivé. " +
+          "Réessayez le rattachement dans un instant.");
+      }
     }
-    return data[0];
   }
+
+  const rattacherModerateur = (id) => rattacher("rattacher_moderateur", { p_utilisateur: id });
+  const rattacherAdmin = (id, atelier_id) =>
+    rattacher("rattacher_admin", { p_utilisateur: id, p_atelier: atelier_id });
 
   /* ---------- Fichiers (buckets de supabase/stockage.sql) ----------
      Les règles d'accès sont posées côté serveur : elles comparent le
@@ -447,7 +456,7 @@ const Api = (() => {
     connecte, role, lireProfil, lireAtelier, atelierId, rafraichirAtelier,
     lireParametres, majParametres, estAdmin, aDroit, aDroitStock, lireDroits, DROITS,
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
-    creerCompte, creerCompteAdmin, rattacherProfil, deconnexion,
+    creerCompte, creerCompteAdmin, rattacherModerateur, rattacherAdmin, deconnexion,
     listerFormules, creerMonAtelier, formuleCourante, aModuleAtelier, aModuleVitrine,
     demanderChangementFormule, annulerChangementFormule,
     approvisionnerStock, sortirStock, inventorierStock, annulerVente,
