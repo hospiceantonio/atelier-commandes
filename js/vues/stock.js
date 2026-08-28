@@ -54,12 +54,17 @@ const VueStock = (() => {
             (ruptures.length > 3 ? "…" : "") + "</div></div>"
         : "") +
 
-      entree("#/stock/entree", "televerser", "Approvisionner",
-        "Ajouter des articles au stock existant") +
-      entree("#/stock/sortie", "telecharger", "Sortie de produit",
-        "Casse, perte, cadeau, article repris") +
-      entree("#/stock/inventaire", "check", "Inventaire",
-        "Compter les rayons et corriger les écarts") +
+      /* Chaque opération a son droit : un modérateur ne voit que ce que
+         son administrateur lui a coché. */
+      (Api.aDroit("stock_approvisionner")
+        ? entree("#/stock/entree", "televerser", "Approvisionner",
+            "Ajouter des articles au stock existant") : "") +
+      (Api.aDroit("stock_sortie")
+        ? entree("#/stock/sortie", "telecharger", "Sortie de produit",
+            "Casse, perte, cadeau, article repris") : "") +
+      (Api.aDroit("stock_inventaire")
+        ? entree("#/stock/inventaire", "check", "Inventaire",
+            "Compter les rayons et corriger les écarts") : "") +
 
       '<div class="carte" style="margin-top:14px">' +
         '<div class="carte-titre">' + UI.icone("horloge", "ic-sm") + "Derniers mouvements</div>" +

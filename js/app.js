@@ -68,6 +68,14 @@
     { motif: /^\/ventes$/, vue: (v) => VueVentes.liste(v), onglet: "/ventes", module: "vitrine" },
     { motif: /^\/vente-nouvelle$/, vue: (v) => VueVentes.nouvelle(v), module: "vitrine", droit: "vente_creer" },
     { motif: /^\/vente\/([^/]+)$/, vue: (v, m) => VueVentes.detail(v, m[1]), module: "vitrine" },
+    { motif: /^\/stock$/, vue: (v) => VueStock.menu(v), module: "vitrine",
+      droit: ["stock_approvisionner", "stock_sortie", "stock_inventaire"] },
+    { motif: /^\/stock\/entree$/, vue: (v) => VueStock.entree(v), module: "vitrine",
+      droit: "stock_approvisionner" },
+    { motif: /^\/stock\/sortie$/, vue: (v) => VueStock.sortie(v), module: "vitrine",
+      droit: "stock_sortie" },
+    { motif: /^\/stock\/inventaire$/, vue: (v) => VueStock.inventaire(v), module: "vitrine",
+      droit: "stock_inventaire" },
   ];
 
   /* Boutique publique : visible sans compte. */
@@ -94,9 +102,15 @@
     (module === "atelier" ? Api.aModuleAtelier() : Api.aModuleVitrine());
 
   /* Deux filtres en un : la formule de l'atelier, et les droits du compte.
-     Un écran s'affiche si la formule le porte ET si le compte y a droit. */
+     Un écran s'affiche si la formule le porte ET si le compte y a droit.
+     `droit` accepte une liste : il suffit alors d'en avoir un — c'est le
+     cas du menu de stock, qui s'ouvre dès qu'une de ses trois opérations
+     est accordée. */
+  const aLeDroit = (droit) =>
+    !droit || (Array.isArray(droit) ? droit.some(Api.aDroit) : Api.aDroit(droit));
+
   const filtrerParFormule = (liste) =>
-    liste.filter((x) => ouvert(x.module) && (!x.droit || Api.aDroit(x.droit)));
+    liste.filter((x) => ouvert(x.module) && aLeDroit(x.droit));
 
   /* Onglets selon le contexte. Le superadmin n'en a pas (tabbar cachée). */
   const ONGLETS_PUBLICS = [
@@ -398,7 +412,7 @@
           "Facture sur les articles en stock"]);
       }
       choix.push(["#/ventes", "stats", "Mes ventes", "Historique des factures"]);
-      if (Api.estAdmin()) {
+      if (Api.aDroitStock()) {
         choix.push(["#/stock", "boutique", "Gestion de stock",
           "Approvisionner, inventorier, sortir"]);
       }

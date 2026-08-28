@@ -18,7 +18,7 @@ const VueProduits = (() => {
       titre: "Vitrine",
       sous: produits.length + " réalisation" + (produits.length > 1 ? "s" : "") + " publiée" + (produits.length > 1 ? "s" : ""),
       actions:
-        (Api.estAdmin()
+        (Api.aDroitStock()
           ? '<a class="btn-ic" href="#/stock" aria-label="Gestion de stock">' +
               UI.icone("boutique") + "</a>"
           : "") +

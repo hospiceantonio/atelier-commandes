@@ -98,7 +98,16 @@ const Api = (() => {
     { cle: "depense_ajouter", libelle: "Ajouter une dépense" },
     { cle: "recettes_recap", libelle: "Imprimer le Récap A4",
       aide: "Demande aussi « Consulter les recettes »." },
+    { cle: "stock_approvisionner", libelle: "Approvisionner le stock" },
+    { cle: "stock_sortie", libelle: "Sortir du stock",
+      aide: "Casse, perte, cadeau — le motif reste obligatoire." },
+    { cle: "stock_inventaire", libelle: "Faire l'inventaire",
+      aide: "Cale le stock sur ce qui est compté." },
   ];
+
+  /* Le menu de stock ne s'affiche que si l'un des trois est accordé. */
+  const aDroitStock = () =>
+    aDroit("stock_approvisionner") || aDroit("stock_sortie") || aDroit("stock_inventaire");
 
   function aDroit(cle) {
     if (!profil) return false;
@@ -436,7 +445,7 @@ const Api = (() => {
   return {
     configOk, bibliothequeOk, init, chargerContexte,
     connecte, role, lireProfil, lireAtelier, atelierId, rafraichirAtelier,
-    lireParametres, majParametres, estAdmin, aDroit, lireDroits, DROITS,
+    lireParametres, majParametres, estAdmin, aDroit, aDroitStock, lireDroits, DROITS,
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
     creerCompte, creerCompteAdmin, rattacherProfil, deconnexion,
     listerFormules, creerMonAtelier, formuleCourante, aModuleAtelier, aModuleVitrine,
