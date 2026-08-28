@@ -280,17 +280,31 @@ const Api = (() => {
    * administrateur, ou l'administrateur d'un atelier créé par le
    * superadmin.
    *
-   * Volontairement sans .single() : l'écriture peut ne toucher aucune
-   * ligne — compte inexistant, ou déjà rattaché à un autre atelier, que
-   * le RLS écarte alors. PostgREST répond dans ce cas par une erreur
-   * illisible ; on dit plutôt ce qui s'est passé.
+   * EN DEUX TEMPS, ET C'EST LE POINT DÉLICAT. On n'utilise pas
+   * « update().select() », parce que PostgreSQL applique la règle de
+   * LECTURE aux lignes qu'un UPDATE ... RETURNING doit rendre — et la
+   * ligne visée, à cet instant, n'est pas encore rattachée à l'atelier :
+   * profils_modification laisse l'administrateur l'écrire,
+   * profils_lecture ne le laisse pas la lire. L'écriture passait donc,
+   * et ne renvoyait rien : l'écran annonçait un échec sur une opération
+   * réussie.
+   *
+   * On écrit d'abord, on relit ensuite. Après l'écriture, la ligne porte
+   * l'atelier : elle est lisible, et sa présence prouve que ça a marché.
    */
   async function rattacherProfil(id, objet) {
-    const { data, error } = await client.from("profils")
-      .update(objet).eq("id", id).select("*");
+    const { error } = await client.from("profils").update(objet).eq("id", id);
     if (error) throw new Error(traduire(error));
+
+    const { data, error: eLecture } = await client.from("profils")
+      .select("*").eq("id", id);
+    if (eLecture) throw new Error(traduire(eLecture));
     if (!data || !data.length) {
-      throw new Error("Ce compte existe déjà et appartient à un autre atelier.");
+      /* Rien à relire : l'écriture n'a rien touché. Deux causes, et on ne
+         peut pas les distinguer d'ici — autant nommer les deux. */
+      throw new Error(
+        "Compte non rattaché : cette adresse est peut-être déjà utilisée " +
+        "ailleurs. Essayez une autre adresse.");
     }
     return data[0];
   }
