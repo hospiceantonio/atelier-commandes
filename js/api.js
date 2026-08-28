@@ -224,6 +224,16 @@ const Api = (() => {
     return cree;
   }
 
+  /**
+   * Demande de changement de formule. Ne change rien à l'abonnement :
+   * note l'intention et renvoie le prix à payer, lu dans la table.
+   * C'est le paiement qui applique le changement, pas cet appel.
+   */
+  const demanderChangementFormule = (formule) =>
+    rpc("demander_changement_formule", { p_formule: formule });
+
+  const annulerChangementFormule = () => rpc("annuler_changement_formule");
+
   /* Modules ouverts par la formule. Le serveur applique les mêmes règles
      (module_atelier / module_vitrine) : ceci n'est que le confort. */
   const formuleCourante = () => (atelier && atelier.formule) || "atelier_vitrine";
@@ -413,6 +423,7 @@ const Api = (() => {
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
     creerCompte, creerCompteAdmin, rattacherProfil, deconnexion,
     listerFormules, creerMonAtelier, formuleCourante, aModuleAtelier, aModuleVitrine,
+    demanderChangementFormule, annulerChangementFormule,
     lister, listerTranche, listerPar, lireLigne, inserer, mettreAJour, mettreAJourPar,
     supprimerLigne, rpc,
     deposerFichier, urlPublique, urlSignee, supprimerFichiers,

@@ -738,6 +738,13 @@ details.bloc > .contenu{padding:0 14px 14px}
 .formule-liste .non{color:var(--encre-tres-douce)}
 .formule-liste .non .ic{stroke:var(--encre-tres-douce)}
 
+/* Choix d'abonnement : le titre et le libellé doivent tenir en entier.
+   .ligne-titre coupe à l'ellipse par défaut — utile dans une liste de
+   clients, gênant quand le texte EST le choix qu'on fait. */
+.ligne-abonnement .ligne-titre{white-space:normal;overflow:visible;line-height:1.3}
+.ligne-abonnement .ligne-sous{line-height:1.35}
+.ligne-abonnement .ligne-fin strong{white-space:nowrap;color:var(--indigo-700)}
+
 /* Sur large écran, les trois formules se comparent côte à côte. */
 @media (min-width:700px){
   .formules{grid-template-columns:repeat(3,1fr);align-items:start}

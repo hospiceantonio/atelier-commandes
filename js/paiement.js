@@ -9,6 +9,7 @@ const Paiement = (() => {
   let chargement = null;        // promesse de chargement du script k.js
   let ecouteurPose = false;
   let finAvantPaiement = null;  // abonnement_fin au moment d'ouvrir le widget
+  let formuleAttendue = null;   // renseignée pour un changement de formule
 
   function config() {
     const p = Api.lireParametres();
@@ -53,16 +54,25 @@ const Paiement = (() => {
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* Le crédit arrive par le webhook, quelques secondes après le
-     paiement : on scrute l'abonnement au lieu de l'annoncer. */
+     paiement : on scrute l'abonnement au lieu de l'annoncer.
+
+     Un changement de formule ne se reconnaît PAS à une date qui avance :
+     le mois repart d'aujourd'hui, donc l'échéance peut reculer. C'est la
+     formule elle-même qu'on guette dans ce cas. */
   async function attendreActivation() {
     UI.toast("Paiement reçu — activation en cours…", "ok");
     const avant = finAvantPaiement ? new Date(finAvantPaiement).getTime() : 0;
+    const vise = formuleAttendue;
+    const applique = (a) => vise
+      ? a.formule === vise
+      : !!(a.abonnement_fin && new Date(a.abonnement_fin).getTime() > avant);
     for (let essai = 0; essai < 40; essai++) {
       await pause(3000);
       let atelier = null;
       try { atelier = await Api.rafraichirAtelier(); } catch (_) { continue; }
-      if (atelier && atelier.abonnement_fin && new Date(atelier.abonnement_fin).getTime() > avant) {
-        UI.toast("Abonnement prolongé — merci !", "ok");
+      if (atelier && applique(atelier)) {
+        UI.toast(vise ? "Nouvelle formule active — merci !" : "Abonnement prolongé — merci !", "ok");
+        formuleAttendue = null;
         window.AppNaviguer();
         return;
       }
@@ -71,7 +81,13 @@ const Paiement = (() => {
       "Réessayez « Vérifier à nouveau » un peu plus tard.", "erreur");
   }
 
-  async function payer() {
+  /**
+   * Ouvre le widget de paiement.
+   * `options.montant`  : à payer (par défaut, l'abonnement en cours) ;
+   * `options.formule`  : code de la formule visée, pour un changement.
+   */
+  async function payer(options) {
+    const o = options || {};
     const prm = config();
     const atelier = Api.lireAtelier();
     if (!prm || !atelier) {
@@ -86,10 +102,11 @@ const Paiement = (() => {
     }
     brancherEcouteur();
     finAvantPaiement = atelier.abonnement_fin;
+    formuleAttendue = o.formule || null;
     /* Pas de numéro pré-rempli : en bac à sable seuls les numéros de
        test passent, et un champ facultatif vide casse le widget. */
     window.openKkiapayWidget({
-      amount: Math.round(atelier.abonnement_mensuel),
+      amount: Math.round(o.montant != null ? o.montant : atelier.abonnement_mensuel),
       key: prm.kkiapay_cle_publique,
       sandbox: !!prm.kkiapay_sandbox,
       position: "center",

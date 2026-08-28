@@ -22,6 +22,8 @@ const VueReglages = (() => {
           '<div class="paire"><span class="l">Nom</span><span class="v">' + e(r.nomAtelier) + "</span></div>" +
           '<div class="paire"><span class="l">Devise</span><span class="v">' + e(r.devise) + "</span></div>" +
           '<div class="paire"><span class="l">Indicatif pays</span><span class="v">' + e(r.indicatif) + "</span></div>" +
+          '<div class="paire"><span class="l">Formule</span><span class="v">' +
+            e(Store.libelleFormule(r.formule)) + "</span></div>" +
           '<div class="paire"><span class="l">Abonnement</span><span class="v">' +
             Utils.fmtMontant(r.abonnementMensuel, r.devise) + " / mois</span></div>" +
           '<div class="paire"><span class="l">Actif jusqu\'au</span><span class="v vert">' +
@@ -29,7 +31,7 @@ const VueReglages = (() => {
         "</div>" +
         (Paiement.disponible()
           ? '<button type="button" class="btn btn-or btn-bloc" id="btn-renouveler" style="margin-top:12px">' +
-              "Renouveler : " + Utils.fmtMontant(r.abonnementMensuel, r.devise) + " par Mobile Money / carte</button>"
+              "Renouveler ou changer de formule</button>"
           : "") +
         '<div class="aide" style="margin-top:8px">Ces informations sont gérées par votre fournisseur.</div>' +
       "</div>" +
@@ -175,7 +177,7 @@ const VueReglages = (() => {
     });
 
     const boutonRenouveler = UI.$("#btn-renouveler");
-    if (boutonRenouveler) boutonRenouveler.onclick = () => Paiement.payer();
+    if (boutonRenouveler) boutonRenouveler.onclick = () => ouvrirRenouvellement(r);
 
     /* Renouvellement par code */
     const champCode = UI.$("#code-abo");
@@ -327,6 +329,97 @@ const VueReglages = (() => {
         }
       };
     };
+  }
+
+  /* ---------- Renouveler, ou changer de formule ----------
+     Deux gestes très différents sous un même bouton :
+       reconduire — le mois s'ajoute à l'échéance en cours ;
+       changer    — l'abonnement en cours est ANNULÉ, le mois repart
+                    d'aujourd'hui, et les jours restants sont perdus.
+     Le second se paie de la même façon, mais il se dit avant. */
+
+  async function ouvrirRenouvellement(r) {
+    let formules = [];
+    try {
+      formules = (await Store.listerFormules()).filter((f) => f.active);
+    } catch (_) { /* formules.sql pas encore exécuté : reconduction seule */ }
+
+    const autres = formules.filter((f) => f.code !== r.formule);
+    const joursRestants = r.abonnementFin
+      ? Math.ceil((new Date(r.abonnementFin).getTime() - Date.now()) / 86400000)
+      : 0;
+
+    const corps = UI.ouvrirFeuille("Renouveler l'abonnement",
+      '<button type="button" class="ligne ligne-abonnement" data-choix="reconduire">' +
+        '<span class="pastille">' + UI.icone("check", "ic-sm") + "</span>" +
+        '<span class="ligne-corps">' +
+          '<span class="ligne-titre">Reconduire ' +
+            e(Store.libelleFormule(r.formule, formules)) + "</span>" +
+          '<span class="ligne-sous">Un mois de plus, ajouté à votre échéance</span>' +
+        "</span>" +
+        '<span class="ligne-fin"><strong>' +
+          Utils.fmtMontant(r.abonnementMensuel, r.devise) + "</strong></span>" +
+      "</button>" +
+      (autres.length
+        ? '<div class="section-titre" style="margin-top:14px">Changer de formule</div>' +
+          autres.map((f) =>
+            '<button type="button" class="ligne ligne-abonnement" style="margin-top:8px" ' +
+                'data-choix="changer" data-formule="' + e(f.code) + '">' +
+              '<span class="pastille">' + UI.icone("argent", "ic-sm") + "</span>" +
+              '<span class="ligne-corps">' +
+                '<span class="ligne-titre">' + e(f.nom) + "</span>" +
+                '<span class="ligne-sous">' + e(Store.resumeFormule(f.code)) + "</span>" +
+              "</span>" +
+              '<span class="ligne-fin"><strong>' +
+                Utils.fmtMontant(Number(f.prix_mensuel) || 0, r.devise) + "</strong></span>" +
+            "</button>"
+          ).join("") +
+          '<div class="aide" style="margin-top:10px">Changer de formule annule ' +
+            "l'abonnement en cours : le mois payé repart d'aujourd'hui." +
+            (joursRestants > 0
+              ? " Vos <strong>" + joursRestants + " jour" + (joursRestants > 1 ? "s" : "") +
+                " restant" + (joursRestants > 1 ? "s" : "") + "</strong> seraient perdus."
+              : "") +
+          "</div>"
+        : ""));
+
+    corps.addEventListener("click", async (ev) => {
+      const bouton = ev.target.closest("[data-choix]");
+      if (!bouton) return;
+
+      if (bouton.dataset.choix === "reconduire") {
+        UI.feuilleSansRappel();
+        UI.fermerFeuille();
+        Paiement.payer();
+        return;
+      }
+
+      const f = autres.find((x) => x.code === bouton.dataset.formule);
+      const prix = Number(f.prix_mensuel) || 0;
+      UI.feuilleSansRappel();
+      UI.fermerFeuille();
+
+      const ok = await UI.confirmer({
+        titre: "Passer à « " + f.nom + " » ?",
+        texte: "Vous réglez " + Utils.fmtMontant(prix, r.devise) + " maintenant, et le mois " +
+          "court à partir d'aujourd'hui. " +
+          (joursRestants > 0
+            ? "Les " + joursRestants + " jour" + (joursRestants > 1 ? "s" : "") +
+              " restant" + (joursRestants > 1 ? "s" : "") + " de votre abonnement actuel sont perdus."
+            : "Votre abonnement actuel est remplacé."),
+        bouton: "Payer " + Utils.fmtMontant(prix, r.devise),
+      });
+      if (!ok) return;
+
+      try {
+        /* Le serveur note l'intention et renvoie SON prix : le montant
+           présenté au paiement ne vient pas de cet écran. */
+        const demande = await Api.demanderChangementFormule(f.code);
+        Paiement.payer({ montant: demande.prix, formule: demande.formule });
+      } catch (err) {
+        UI.toast(err.message || "Changement impossible", "erreur");
+      }
+    });
   }
 
   /* ---------- Mon compte (modérateur) ----------

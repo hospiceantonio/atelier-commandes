@@ -192,9 +192,22 @@
     };
   }
 
-  function ecranAbonnementExpire() {
+  async function ecranAbonnementExpire() {
     const r = Store.lireReglages();
     const paiementPossible = typeof Paiement !== "undefined" && Paiement.disponible();
+
+    /* Reprendre, ou repartir sur une autre formule : c'est ici que la
+       question se pose le plus naturellement. Le choix est posé DANS le
+       voile — une feuille passerait derrière lui, et UI.confirmer aussi ;
+       chaque bouton porte donc son prix et son avertissement. */
+    let autres = [];
+    if (paiementPossible && Api.estAdmin()) {
+      try {
+        autres = (await Store.listerFormules())
+          .filter((f) => f.active && f.code !== r.formule);
+      } catch (_) { /* formules.sql pas encore exécuté */ }
+    }
+
     afficherVoile(boiteVoile(
       "Abonnement expiré",
       "L'accès à <strong>" + Utils.echapper(r.nomAtelier) + "</strong> est suspendu. " +
@@ -204,7 +217,18 @@
         "Vos données sont intactes.",
       (paiementPossible
         ? '<button type="button" class="btn btn-or btn-bloc" id="voile-payer" style="margin-top:6px">' +
-            "Payer " + Utils.fmtMontant(r.abonnementMensuel, r.devise) + " par Mobile Money / carte</button>"
+            "Reconduire : " + Utils.fmtMontant(r.abonnementMensuel, r.devise) + "</button>"
+        : "") +
+      (autres.length
+        ? '<p class="voile-contact" style="margin:14px 0 6px">Ou changer de formule :</p>' +
+          autres.map((f) =>
+            '<button type="button" class="btn btn-clair btn-bloc" style="margin-top:6px" ' +
+                'data-formule="' + Utils.echapper(f.code) + '">' +
+              Utils.echapper(f.nom) + " — " +
+              Utils.fmtMontant(Number(f.prix_mensuel) || 0, r.devise) + "</button>"
+          ).join("") +
+          '<p class="voile-contact" style="margin-top:8px">Le mois payé court à ' +
+            "partir d'aujourd'hui.</p>"
         : "") +
       '<div class="btn-rangee" style="margin-top:10px">' +
         '<button type="button" class="btn btn-clair" id="voile-verifier">Vérifier à nouveau</button>' +
@@ -213,6 +237,19 @@
     ));
     const boutonPayer = document.getElementById("voile-payer");
     if (boutonPayer) boutonPayer.onclick = () => Paiement.payer();
+
+    for (const bouton of document.querySelectorAll("#voile-licence [data-formule]")) {
+      bouton.onclick = async () => {
+        bouton.disabled = true;
+        try {
+          const demande = await Api.demanderChangementFormule(bouton.dataset.formule);
+          Paiement.payer({ montant: demande.prix, formule: demande.formule });
+        } catch (err) {
+          UI.toast(err.message || "Changement impossible", "erreur");
+          bouton.disabled = false;
+        }
+      };
+    }
     document.getElementById("voile-verifier").onclick = async () => {
       await Api.rafraichirAtelier();
       naviguer();
@@ -289,7 +326,7 @@
       rendreTabbar(filtrerParFormule(moderateur ? ONGLETS_MODERATEUR : ONGLETS_ADMIN), cle);
 
       if (abonnementExpire()) {
-        ecranAbonnementExpire();
+        await ecranAbonnementExpire();
         return;
       }
     }
