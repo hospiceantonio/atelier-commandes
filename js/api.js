@@ -17,6 +17,10 @@ const Api = (() => {
     "Email not confirmed": "Email non confirmé — désactivez « Confirm email » dans Supabase (Authentication → Providers → Email).",
     "Password should be at least 6 characters": "Le mot de passe doit faire au moins 6 caractères.",
     "Failed to fetch": "Connexion impossible — vérifiez Internet et la configuration Supabase.",
+    /* PostgREST quand .single() ne reçoit aucune ligne : l'écriture n'a
+       rien touché, en général parce que le RLS a écarté la ligne visée. */
+    "Cannot coerce the result to a single JSON object":
+      "Aucune ligne correspondante — l'élément n'existe pas ou ne vous est pas accessible.",
   };
 
   function traduire(erreur) {
@@ -217,7 +221,35 @@ const Api = (() => {
     });
     if (error) throw new Error(traduire(error));
     if (!data.user) throw new Error("Création du compte impossible.");
+    /* Quand « Confirm email » est actif, Supabase ne dit PAS que l'adresse
+       est déjà prise : pour ne pas révéler qui possède un compte, il
+       renvoie un utilisateur factice, sans identité rattachée. Sans ce
+       contrôle, l'échec ne surgissait qu'au rattachement du profil, sous
+       la forme « Cannot coerce the result to a single JSON object ». */
+    if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error("Un compte existe déjà avec cet email.");
+    }
     return data.user;
+  }
+
+  /**
+   * Rattache un compte à un atelier : un modérateur ajouté par son
+   * administrateur, ou l'administrateur d'un atelier créé par le
+   * superadmin.
+   *
+   * Volontairement sans .single() : l'écriture peut ne toucher aucune
+   * ligne — compte inexistant, ou déjà rattaché à un autre atelier, que
+   * le RLS écarte alors. PostgREST répond dans ce cas par une erreur
+   * illisible ; on dit plutôt ce qui s'est passé.
+   */
+  async function rattacherProfil(id, objet) {
+    const { data, error } = await client.from("profils")
+      .update(objet).eq("id", id).select("*");
+    if (error) throw new Error(traduire(error));
+    if (!data || !data.length) {
+      throw new Error("Ce compte existe déjà et appartient à un autre atelier.");
+    }
+    return data[0];
   }
 
   /* ---------- Fichiers (buckets de supabase/stockage.sql) ----------
@@ -322,7 +354,7 @@ const Api = (() => {
     connecte, role, lireProfil, lireAtelier, atelierId, rafraichirAtelier,
     lireParametres, majParametres, estAdmin,
     connexion, verifierCode, renvoyerCode, doubleFacteurExige, diagnosticJeton,
-    creerCompte, creerCompteAdmin, deconnexion,
+    creerCompte, creerCompteAdmin, rattacherProfil, deconnexion,
     listerFormules, creerMonAtelier, formuleCourante, aModuleAtelier, aModuleVitrine,
     lister, listerTranche, listerPar, lireLigne, inserer, mettreAJour, mettreAJourPar,
     supprimerLigne, rpc,

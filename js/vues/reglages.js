@@ -298,7 +298,7 @@ const VueReglages = (() => {
         try {
           const utilisateur = await Api.creerCompteAdmin(email, motDePasse, nom,
             UI.$("#mod-tel", corps).value.trim());
-          await Api.mettreAJour("profils", utilisateur.id, {
+          await Api.rattacherProfil(utilisateur.id, {
             role: "moderateur", atelier_id: Api.atelierId(),
           });
           UI.feuilleSansRappel();
